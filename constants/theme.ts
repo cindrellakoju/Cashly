@@ -1,6 +1,6 @@
 import { ImageSourcePropType } from 'react-native';
 
-export type AppTheme = 'kawaii';
+export type AppTheme = 'kawaii' | 'noir';
 
 export interface ThemeColors {
   name: string;
@@ -20,6 +20,7 @@ export interface ThemeColors {
   textMain: string;
   textMuted: string;
   textSubtle: string;
+  textOnAccent: string;
   borderSoft: string;
   borderAccent: string;
   tabBarBg: string;
@@ -53,6 +54,12 @@ export const THEME_STICKERS: Record<AppTheme, ThemeStickers> = {
     wishlist: require('@/assets/images/stickers/sticker_gift.jpg'),
     vault: require('@/assets/images/stickers/sticker_lock.jpg'),
   },
+  noir: {
+    home: require('@/assets/images/stickers/nero_bulls.jpg'),
+    debitCredit: require('@/assets/images/stickers/nero_grimoire.jpg'),
+    wishlist: require('@/assets/images/stickers/op_zoro.jpg'),
+    vault: require('@/assets/images/stickers/nero_bird.jpg'),
+  },
 };
 
 export const THEMES: Record<AppTheme, ThemeColors> = {
@@ -74,6 +81,7 @@ export const THEMES: Record<AppTheme, ThemeColors> = {
     textMain: '#2c352d',
     textMuted: '#637365',
     textSubtle: '#8f9e91',
+    textOnAccent: '#2c352d',
     borderSoft: '#d3e2d2',
     borderAccent: '#f3c2cc',
     tabBarBg: '#ffffff',
@@ -92,6 +100,43 @@ export const THEMES: Record<AppTheme, ThemeColors> = {
       elevation: 3,
     },
   },
+  noir: {
+    name: 'Noir Monochrome 🕶️',
+    badge: '🕶️ Noir B&W',
+    bgPrimary: '#0d0d0f',
+    bgSecondary: '#161619',
+    bgCard: '#1f1f23',
+    bgCardAlt: '#27272c',
+    primaryAccent: '#ffffff',
+    primaryAccentLight: '#27272a',
+    primaryGreen: '#4ade80',
+    primaryGreenLight: '#142e1b',
+    danger: '#f87171',
+    dangerLight: '#381619',
+    warning: '#fbbf24',
+    warningLight: '#36270d',
+    textMain: '#f4f4f5',
+    textMuted: '#a1a1aa',
+    textSubtle: '#71717a',
+    textOnAccent: '#121214',
+    borderSoft: '#2e2e33',
+    borderAccent: '#52525b',
+    tabBarBg: '#121215',
+    tabBarBorder: '#27272a',
+    activeTabTint: '#ffffff',
+    inactiveTabTint: '#71717a',
+    statusPendingBg: '#381619',
+    statusPendingText: '#f87171',
+    statusCompletedBg: '#142e1b',
+    statusCompletedText: '#4ade80',
+    cardShadow: {
+      shadowColor: '#000000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.35,
+      shadowRadius: 10,
+      elevation: 4,
+    },
+  },
 };
 
 export const CATEGORY_PALETTES: Record<AppTheme, Record<string, string>> = {
@@ -107,6 +152,18 @@ export const CATEGORY_PALETTES: Record<AppTheme, Record<string, string>> = {
     'Health': '#e06d86',
     'Education': '#5b9bd5',
   },
+  noir: {
+    '🛍️ Shopping': '#e4e4e7',
+    '🏠 Utilities': '#a1a1aa',
+    '🍔 Food': '#d4d4d8',
+    '🚗 Transport': '#71717a',
+    '☕ Coffee': '#e2e8f0',
+    '🍿 Fun': '#cbd5e1',
+    '💼 Salary': '#4ade80',
+    '🔄 Transfer': '#94a3b8',
+    'Health': '#f87171',
+    'Education': '#cbd5e1',
+  },
 };
 
 export const Colors = {
@@ -120,7 +177,7 @@ export const Colors = {
   },
   dark: {
     text: '#ECEDEE',
-    background: '#151718',
+    background: '#4885a4ff',
     tint: '#fff',
     icon: '#9BA1A6',
     tabIconDefault: '#9BA1A6',
@@ -134,5 +191,3 @@ export const Fonts = {
   rounded: 'System',
   mono: 'SpaceMono',
 };
-
-

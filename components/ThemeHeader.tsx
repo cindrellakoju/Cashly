@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { useFinancial } from '@/context/FinancialContext';
@@ -20,8 +20,9 @@ export const ThemeHeader: React.FC<ThemeHeaderProps> = ({
   rightAction,
 }) => {
   const {
+    theme,
+    setTheme,
     colors,
-    stickers,
     selectedMonth,
     setSelectedMonth,
     isAdminMode,
@@ -78,11 +79,11 @@ export const ThemeHeader: React.FC<ThemeHeaderProps> = ({
             <Text
               style={[
                 styles.themePillText,
-                { color: !isAdminMode ? '#2c352d' : colors.textMuted },
+                { color: !isAdminMode ? (colors.textOnAccent || '#2c352d') : colors.textMuted },
                 !isAdminMode && styles.themePillTextActive,
               ]}
             >
-              👤 Normal
+              Normal
             </Text>
           </TouchableOpacity>
 
@@ -104,36 +105,61 @@ export const ThemeHeader: React.FC<ThemeHeaderProps> = ({
             <Text
               style={[
                 styles.themePillText,
-                { color: isAdminMode ? '#2c352d' : colors.textMuted },
+                { color: isAdminMode ? (colors.textOnAccent || '#2c352d') : colors.textMuted },
                 isAdminMode && styles.themePillTextActive,
               ]}
             >
-              👑 Admin
+              Admin
             </Text>
           </TouchableOpacity>
         </View>
 
-        {/* Date Dropdown Trigger Button on Top Right */}
-        <TouchableOpacity
-          activeOpacity={0.75}
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            setIsMonthModalOpen(true);
-          }}
-          style={[
-            styles.dateDropdownBtn,
-            {
-              backgroundColor: colors.bgSecondary,
-              borderColor: colors.borderSoft,
-            },
-          ]}
-        >
-          <Text style={styles.dateEmoji}>📅</Text>
-          <Text style={[styles.dateDropdownText, { color: colors.textMain }]} numberOfLines={1}>
-            {formatSelectedMonthLabel(selectedMonth)}
-          </Text>
-          <Ionicons name="chevron-down" size={13} color={colors.textMuted} />
-        </TouchableOpacity>
+        <View style={styles.topBarRight}>
+          {/* Quick Theme Switcher Pill */}
+          <TouchableOpacity
+            activeOpacity={0.75}
+            onPress={async () => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              const nextTheme = theme === 'kawaii' ? 'noir' : 'kawaii';
+              await setTheme(nextTheme);
+            }}
+            style={[
+              styles.themeQuickToggleBtn,
+              {
+                backgroundColor: colors.bgSecondary,
+                borderColor: colors.borderSoft,
+              },
+            ]}
+          >
+            <Text style={{ fontSize: 13 }}>{theme === 'kawaii' ? '🌸' : '🕶️'}</Text>
+          </TouchableOpacity>
+
+          {/* Date Dropdown Trigger Button on Top Right */}
+          <TouchableOpacity
+            activeOpacity={0.75}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setIsMonthModalOpen(true);
+            }}
+            style={[
+              styles.dateDropdownBtn,
+              {
+                backgroundColor: colors.bgSecondary,
+                borderColor: colors.borderSoft,
+              },
+            ]}
+          >
+            <Text style={styles.dateEmoji}>📅</Text>
+            <Text
+              style={[styles.dateDropdownText, { color: colors.textMain }]}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
+              {formatSelectedMonthLabel(selectedMonth)}
+            </Text>
+            <Ionicons name="chevron-down" size={13} color={colors.textMuted} style={{ flexShrink: 0 }} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Header Banner Content */}
@@ -147,15 +173,7 @@ export const ThemeHeader: React.FC<ThemeHeaderProps> = ({
 
         {rightAction ? (
           <View style={styles.rightActionWrapper}>{rightAction}</View>
-        ) : (
-          <View style={[styles.stickerWrapper, { borderColor: colors.borderAccent || colors.primaryAccent }]}>
-            <Image
-              source={stickers[stickerKey]}
-              style={styles.stickerImage}
-              resizeMode="cover"
-            />
-          </View>
-        )}
+        ) : null}
       </View>
 
       {/* Month Dropdown Popup Modal */}
@@ -174,6 +192,7 @@ export const ThemeHeader: React.FC<ThemeHeaderProps> = ({
           setIsAdminPinModalOpen(false);
           setIsAdminMode(true);
         }}
+        pinType="admin"
       />
     </View>
   );
@@ -202,7 +221,7 @@ const styles = StyleSheet.create({
   },
   themePill: {
     paddingVertical: 5,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
@@ -214,15 +233,33 @@ const styles = StyleSheet.create({
   themePillTextActive: {
     fontWeight: '800',
   },
+  topBarRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 6,
+    flex: 1,
+    minWidth: 0,
+  },
+  themeQuickToggleBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
   dateDropdownBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 6,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     borderRadius: 20,
     borderWidth: 1,
-    gap: 6,
-    maxWidth: '52%',
+    gap: 5,
+    flexShrink: 1,
+    minWidth: 0,
     shadowColor: '#3c5a41',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
@@ -230,11 +267,13 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   dateEmoji: {
-    fontSize: 13,
+    fontSize: 12,
+    flexShrink: 0,
   },
   dateDropdownText: {
     fontSize: 12,
     fontWeight: '700',
+    flexShrink: 1,
   },
   bannerRow: {
     flexDirection: 'row',

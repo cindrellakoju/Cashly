@@ -1,50 +1,64 @@
-# Welcome to your Expo app 👋
+# 💸 Cashly - Personal Finance & Expense Tracker
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A full-featured personal finance mobile app built with **React Native**, **Expo**, and **SQLite**. Features local offline data storage, dual themes (🌸 Kawaii & 🕶️ Noir), multi-account tracking, debt/credit management, mandatory email OTP onboarding, and a global full-screen admin control panel.
 
-## Get started
+---
 
-1. Install dependencies
+## 🚀 Quick Start
 
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
+### 1. Install Dependencies
 ```bash
-npm run reset-project
+npm install
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+### 2. Configure Environment
+Copy `.env.example` to `.env` and fill in your Gmail SMTP credentials:
+```bash
+cp .env.example .env
+```
 
-## Learn more
+### 3. Start the Email Dispatch Server
+*(Required for OTP email verification and PIN recovery)*
+```bash
+npm run email-server
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+### 4. Start the Expo Application
+In a separate terminal:
+```bash
+npx expo start
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+---
 
-## Join the community
+## 🏛️ System Architecture
 
-Join our community of developers creating universal apps.
+For complete system architecture diagrams, state flow, and data models, see **[`DOCUMENTATION.md`](./DOCUMENTATION.md)**:
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+- **2.1 High-Level Architecture Diagram**: Flow from React Native client through SQLite, Context, and the Node.js email micro-service.
+- **2.2 Global Admin Overlay Architecture**: Root layout (`app/(tabs)/_layout.tsx`) managing full-screen `AdminDashboardView` across all tabs.
+- **2.3 State Management & Data Flow**: Unidirectional React Context (`FinancialContext`) synchronizing with SQLite (`services/database.ts`).
+- **2.4 Email Micro-Service Architecture**: OTP generation, `/send-verification` dispatch, and Gmail SMTP transport.
+
+---
+
+## ✨ Key Features
+
+- **Mandatory Email OTP Onboarding**: Email is compulsory during first setup; verified via a 6-digit OTP code sent via Gmail SMTP.
+- **Global Admin Control Panel**: Full-screen administrator overlay accessible from any tab (*Home*, *Debt & Credit*, *Wishlist*, *Accounts*).
+- **Persistent Header Controls in Admin**: Mode toggle (`[ Normal | Admin ]`), quick theme toggle (`🌸 / 🕶️`), and date selector (`📅 Month / All Time ⌄`).
+- **Dynamic Table Date Filtering**: Expenses, Incomes, and Transactions in Admin mode dynamically filter based on the header's date selector.
+- **Multi-Account Asset Vault**: Manage Cash, Bank, Wallet, Credit, and Savings accounts with PIN encryption.
+- **Dual Themes**: Switch instantly between **Kawaii Pastel** and **Noir Monochrome**.
+- **JSON Backup & Restore**: Export and import full database state to signed JSON files.
+
+---
+
+## 📖 Complete Documentation
+
+Refer to **[`DOCUMENTATION.md`](./DOCUMENTATION.md)** for detailed coverage of:
+1. Architecture Diagrams (Mermaid)
+2. Database Schema (12 SQLite tables)
+3. Component Hierarchy & Navigation
+4. Services & Micro-services
+5. Security & Access Control

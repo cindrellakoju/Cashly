@@ -38,78 +38,92 @@ export const AestheticModal: React.FC<AestheticModalProps> = ({
       transparent
       animationType="fade"
       onRequestClose={onClose}
+      statusBarTranslucent
     >
-      <TouchableWithoutFeedback onPress={onClose}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardAvoidingView}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      >
         <View style={styles.backdrop}>
-          <TouchableWithoutFeedback onPress={() => {}}>
-            <KeyboardAvoidingView
-              behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-              style={styles.keyboardContainer}
-            >
-              <View
-                style={[
-                  styles.modalCard,
-                  {
-                    backgroundColor: colors.bgCard,
-                    borderColor: colors.borderSoft,
-                    ...colors.cardShadow,
-                  },
-                ]}
-              >
-                {/* Header */}
-                <View style={styles.headerRow}>
-                  <View style={styles.titleColumn}>
-                    <Text style={[styles.modalTitle, { color: colors.textMain }]}>
-                      {title} {icon ? icon : ''}
-                    </Text>
-                    {subtitle ? (
-                      <Text style={[styles.modalSubtitle, { color: colors.textMuted }]}>
-                        {subtitle}
-                      </Text>
-                    ) : null}
-                  </View>
-                  <TouchableOpacity
-                    onPress={onClose}
-                    activeOpacity={0.7}
-                    style={[styles.closeBtn, { backgroundColor: colors.bgSecondary }]}
-                  >
-                    <Ionicons name="close" size={20} color={colors.textMain} />
-                  </TouchableOpacity>
-                </View>
-
-                {/* Content */}
-                <ScrollView
-                  showsVerticalScrollIndicator={false}
-                  contentContainerStyle={styles.scrollContent}
-                >
-                  {children}
-                </ScrollView>
-              </View>
-            </KeyboardAvoidingView>
+          {/* Backdrop touch target to dismiss modal on tap outside */}
+          <TouchableWithoutFeedback onPress={onClose}>
+            <View style={styles.backdropDismissArea} />
           </TouchableWithoutFeedback>
+
+          <View
+            style={[
+              styles.modalCard,
+              {
+                backgroundColor: colors.bgCard,
+                borderColor: colors.borderSoft,
+                ...colors.cardShadow,
+              },
+            ]}
+          >
+            {/* Header */}
+            <View style={styles.headerRow}>
+              <View style={styles.titleColumn}>
+                <Text style={[styles.modalTitle, { color: colors.textMain }]}>
+                  {title} {icon ? icon : ''}
+                </Text>
+                {subtitle ? (
+                  <Text style={[styles.modalSubtitle, { color: colors.textMuted }]}>
+                    {subtitle}
+                  </Text>
+                ) : null}
+              </View>
+              <TouchableOpacity
+                onPress={onClose}
+                activeOpacity={0.7}
+                style={[styles.closeBtn, { backgroundColor: colors.bgSecondary }]}
+              >
+                <Ionicons name="close" size={20} color={colors.textMain} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Scrollable Content */}
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              contentContainerStyle={styles.scrollContent}
+              style={styles.scrollView}
+              bounces={false}
+            >
+              {children}
+            </ScrollView>
+          </View>
         </View>
-      </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
+  keyboardAvoidingView: {
+    flex: 1,
+  },
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
     justifyContent: 'flex-end',
   },
-  keyboardContainer: {
-    width: '100%',
-    maxHeight: '90%',
+  backdropDismissArea: {
+    ...StyleSheet.absoluteFill,
   },
   modalCard: {
+    width: '100%',
+    maxHeight: '92%',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     borderWidth: 1,
     paddingHorizontal: 20,
     paddingTop: 20,
-    paddingBottom: 32,
+    paddingBottom: Platform.OS === 'ios' ? 32 : 24,
+  },
+  scrollView: {
+    flexShrink: 1,
   },
   headerRow: {
     flexDirection: 'row',
@@ -140,6 +154,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   scrollContent: {
-    paddingBottom: 16,
+    paddingBottom: 28,
   },
 });

@@ -19,7 +19,7 @@ import { AestheticModal } from '@/components/AestheticModal';
 type DebtSegment = 'borrowed' | 'lent';
 
 export default function DebitCreditScreen() {
-  const { colors, theme, debts, accounts, addDebt, recordInstallment } = useFinancial();
+  const { colors, theme, debts, accounts, addDebt, recordInstallment, currencySymbol } = useFinancial();
   const [segment, setSegment] = useState<DebtSegment>('borrowed');
 
   // Modals
@@ -94,8 +94,8 @@ export default function DebitCreditScreen() {
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.bgPrimary }]} edges={['top']}>
       {/* Header */}
       <ThemeHeader
-        title="Debt & Credit 💳"
-        subtitle="Manage loans and friend balances 🤝"
+        title="Debt & Credit"
+        subtitle="Manage loans & debts"
         stickerKey="debitCredit"
         rightAction={
           <TouchableOpacity
@@ -108,7 +108,7 @@ export default function DebitCreditScreen() {
             }}
             style={[styles.headerAddBtn, { backgroundColor: colors.primaryAccent }]}
           >
-            <Ionicons name="add" size={20} color={theme === 'kawaii' ? '#2c352d' : '#ffffff'} />
+            <Ionicons name="add" size={20} color={colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214')} />
           </TouchableOpacity>
         }
       />
@@ -118,13 +118,13 @@ export default function DebitCreditScreen() {
         options={[
           {
             key: 'borrowed',
-            label: 'Money Borrowed 💰',
-            badge: `Rs. ${borrowedTotal.toLocaleString()}`,
+            label: 'Money Borrowed',
+            badge: `${currencySymbol} ${borrowedTotal.toLocaleString()}`,
           },
           {
             key: 'lent',
-            label: 'Money Lent 🤝',
-            badge: `Rs. ${lentTotal.toLocaleString()}`,
+            label: 'Money Lent',
+            badge: `${currencySymbol} ${lentTotal.toLocaleString()}`,
           },
         ]}
         selectedKey={segment}
@@ -133,12 +133,13 @@ export default function DebitCreditScreen() {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         contentContainerStyle={styles.scrollContent}
       >
         <View style={styles.listContainer}>
           {filteredDebts.length === 0 ? (
             <View style={[styles.emptyCard, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft }]}>
-              <Text style={styles.emptyEmoji}>🎉</Text>
               <Text style={[styles.emptyTitle, { color: colors.textMain }]}>No {segment === 'borrowed' ? 'borrowed debts' : 'money lent'}!</Text>
               <Text style={[styles.emptySub, { color: colors.textMuted }]}>
                 All balances are clear. Tap + above to add a new record.
@@ -217,16 +218,16 @@ export default function DebitCreditScreen() {
 
                   {/* Financial Breakdown Row */}
                   <View style={styles.financialRow}>
-                    <View>
+                    <View style={{ flex: 1 }}>
                       <Text style={[styles.finLabel, { color: colors.textMuted }]}>Remaining</Text>
-                      <Text style={[styles.finValue, { color: isCompleted ? colors.primaryGreen : colors.danger }]}>
-                        Rs. {item.remaining.toLocaleString()}
+                      <Text style={[styles.finValue, { color: isCompleted ? colors.primaryGreen : colors.danger }]} numberOfLines={1} adjustsFontSizeToFit>
+                        {currencySymbol} {item.remaining.toLocaleString()}
                       </Text>
                     </View>
-                    <View style={styles.alignRight}>
+                    <View style={[styles.alignRight, { flex: 1 }]}>
                       <Text style={[styles.finLabel, { color: colors.textMuted }]}>Total Loan</Text>
-                      <Text style={[styles.finValueMuted, { color: colors.textMain }]}>
-                        Rs. {item.total.toLocaleString()}
+                      <Text style={[styles.finValueMuted, { color: colors.textMain }]} numberOfLines={1} adjustsFontSizeToFit>
+                        {currencySymbol} {item.total.toLocaleString()}
                       </Text>
                     </View>
                   </View>
@@ -246,7 +247,7 @@ export default function DebitCreditScreen() {
 
                   <View style={styles.cardFooter}>
                     <Text style={[styles.percentText, { color: colors.textMuted }]}>
-                      {percent}% Repaid (Rs. {paidAmount.toLocaleString()})
+                      {percent}% Repaid ({currencySymbol} {paidAmount.toLocaleString()})
                     </Text>
                     <Text style={[styles.tapHint, { color: colors.activeTabTint }]}>
                       View History ❯
@@ -277,7 +278,7 @@ export default function DebitCreditScreen() {
                 { backgroundColor: debtType === 'borrowed' ? colors.primaryAccent : colors.bgSecondary },
               ]}
             >
-              <Text style={[styles.typeOptionText, { color: debtType === 'borrowed' ? (theme === 'kawaii' ? '#2c352d' : '#ffffff') : colors.textMuted }]}>
+              <Text style={[styles.typeOptionText, { color: debtType === 'borrowed' ? (colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214')) : colors.textMuted }]}>
                 Money Borrowed 💰
               </Text>
             </TouchableOpacity>
@@ -358,7 +359,7 @@ export default function DebitCreditScreen() {
                       styles.accountChipText,
                       {
                         color: isSelected
-                          ? (debtType === 'lent' && theme === 'kawaii' ? '#2c352d' : '#ffffff')
+                          ? (debtType === 'lent' ? colors.textOnAccent : (theme === 'noir' ? '#121214' : '#ffffff'))
                           : colors.textMain,
                       },
                       isSelected && { fontWeight: '800' },
@@ -378,8 +379,8 @@ export default function DebitCreditScreen() {
             />
             <Text style={[styles.sourceNoticeText, { color: debtType === 'lent' ? colors.danger : colors.primaryGreen }]}>
               {debtType === 'lent'
-                ? `Subtracts Rs. ${totalAmount ? parseFloat(totalAmount).toLocaleString() : '0'} from ${debtAccount} balance & logs in ledger`
-                : `Adds Rs. ${totalAmount ? parseFloat(totalAmount).toLocaleString() : '0'} to ${debtAccount} balance & logs in ledger`}
+                ? `Subtracts ${currencySymbol} ${totalAmount ? parseFloat(totalAmount).toLocaleString() : '0'} from ${debtAccount} balance & logs in ledger`
+                : `Adds ${currencySymbol} ${totalAmount ? parseFloat(totalAmount).toLocaleString() : '0'} to ${debtAccount} balance & logs in ledger`}
             </Text>
           </View>
         </View>
@@ -403,7 +404,7 @@ export default function DebitCreditScreen() {
         </View>
 
         <View style={styles.formGroup}>
-          <Text style={[styles.inputLabel, { color: colors.textMain }]}>Total Amount (Rs.)</Text>
+          <Text style={[styles.inputLabel, { color: colors.textMain }]}>Total Amount ({currencySymbol})</Text>
           <TextInput
             style={[styles.input, { backgroundColor: colors.bgSecondary, color: colors.textMain, borderColor: colors.borderSoft }]}
             placeholder="50000"
@@ -418,7 +419,7 @@ export default function DebitCreditScreen() {
           onPress={handleAddDebtSubmit}
           style={[styles.submitButton, { backgroundColor: colors.primaryAccent }]}
         >
-          <Text style={[styles.submitButtonText, { color: theme === 'kawaii' ? '#2c352d' : '#ffffff' }]}>
+          <Text style={[styles.submitButtonText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}>
             Save Record 💾
           </Text>
         </TouchableOpacity>
@@ -429,7 +430,7 @@ export default function DebitCreditScreen() {
         visible={isHistoryModalOpen && selectedDebt !== null}
         onClose={() => setIsHistoryModalOpen(false)}
         title={selectedDebt ? `${selectedDebt.person}'s Log` : 'Payment History'}
-        subtitle={`Total: Rs. ${selectedDebt?.total.toLocaleString()} • Remaining: Rs. ${selectedDebt?.remaining.toLocaleString()}`}
+        subtitle={`Total: ${currencySymbol} ${selectedDebt?.total.toLocaleString()} • Remaining: ${currencySymbol} ${selectedDebt?.remaining.toLocaleString()}`}
         icon="📜"
       >
         {/* Original Debt Summary Info */}
@@ -470,11 +471,11 @@ export default function DebitCreditScreen() {
         {selectedDebt && selectedDebt.remaining > 0 && (
           <View style={[styles.repayFormCard, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
             <Text style={[styles.repayFormTitle, { color: colors.textMain }]}>Record Repayment 💸</Text>
-            
+
             <View style={styles.repayInputRow}>
               <TextInput
                 style={[styles.repayInput, { backgroundColor: colors.bgCard, color: colors.textMain, borderColor: colors.borderSoft }]}
-                placeholder="Amount (Rs.)"
+                placeholder={`Amount (${currencySymbol})`}
                 placeholderTextColor={colors.textSubtle}
                 keyboardType="numeric"
                 value={repayAmount}
@@ -535,10 +536,10 @@ export default function DebitCreditScreen() {
                 </View>
                 <View style={styles.alignRight}>
                   <Text style={[styles.histAmount, { color: colors.primaryGreen }]}>
-                    +Rs. {h.amount.toLocaleString()}
+                    +{currencySymbol} {h.amount.toLocaleString()}
                   </Text>
                   <Text style={[styles.histRemain, { color: colors.textSubtle }]}>
-                    Rem: Rs. {h.remaining.toLocaleString()}
+                    Rem: {currencySymbol} {h.remaining.toLocaleString()}
                   </Text>
                 </View>
               </View>

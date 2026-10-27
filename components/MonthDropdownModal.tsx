@@ -152,7 +152,7 @@ export const MonthDropdownModal: React.FC<MonthDropdownModalProps> = ({
                   <Text
                     style={[
                       styles.allTimeText,
-                      { color: isAllTimeSelected ? '#2c352d' : colors.textMain },
+                      { color: isAllTimeSelected ? colors.textOnAccent : colors.textMain },
                       isAllTimeSelected && styles.allTimeTextActive,
                     ]}
                   >
@@ -160,7 +160,7 @@ export const MonthDropdownModal: React.FC<MonthDropdownModalProps> = ({
                   </Text>
                 </View>
                 {isAllTimeSelected && (
-                  <Ionicons name="checkmark-circle" size={18} color="#2c352d" />
+                  <Ionicons name="checkmark-circle" size={18} color={colors.textOnAccent} />
                 )}
               </TouchableOpacity>
 
@@ -209,7 +209,7 @@ export const MonthDropdownModal: React.FC<MonthDropdownModalProps> = ({
                       <Text
                         style={[
                           styles.monthShortText,
-                          { color: isSelected ? '#2c352d' : colors.textMain },
+                          { color: isSelected ? colors.textOnAccent : colors.textMain },
                           isSelected && styles.monthShortTextActive,
                         ]}
                       >

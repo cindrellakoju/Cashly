@@ -34,7 +34,7 @@ const PRESET_WISHLIST_PHOTOS = [
 ];
 
 export default function WishlistScreen() {
-  const { colors, theme, wishlist, addWishlistItem, toggleWishlistPurchased, deleteWishlistItem } = useFinancial();
+  const { colors, theme, wishlist, addWishlistItem, toggleWishlistPurchased, deleteWishlistItem, currencySymbol } = useFinancial();
 
   // Modals & Lightbox
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -171,7 +171,7 @@ export default function WishlistScreen() {
       {/* Header */}
       <ThemeHeader
         title="Wishlist & Dreams 🎁"
-        subtitle="Track savings goals and milestones ✨"
+        subtitle="Track savings goals and milestones"
         stickerKey="wishlist"
         rightAction={
           <TouchableOpacity
@@ -179,13 +179,15 @@ export default function WishlistScreen() {
             onPress={() => setIsAddModalOpen(true)}
             style={[styles.headerAddBtn, { backgroundColor: colors.primaryAccent }]}
           >
-            <Ionicons name="add" size={20} color={theme === 'kawaii' ? '#2c352d' : '#ffffff'} />
+            <Ionicons name="add" size={20} color={colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214')} />
           </TouchableOpacity>
         }
       />
 
       <ScrollView
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         contentContainerStyle={styles.scrollContent}
       >
         <View style={styles.container}>
@@ -194,7 +196,7 @@ export default function WishlistScreen() {
             <View style={styles.summaryTop}>
               <View>
                 <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Total Wishlist Target</Text>
-                <Text style={[styles.summaryTotal, { color: colors.textMain }]}>Rs. {totalValue.toLocaleString()}</Text>
+                <Text style={[styles.summaryTotal, { color: colors.textMain }]}>{currencySymbol} {totalValue.toLocaleString()}</Text>
               </View>
               <View style={[styles.badgePill, { backgroundColor: colors.primaryGreenLight }]}>
                 <Text style={[styles.badgeText, { color: colors.primaryGreen }]}>
@@ -285,10 +287,10 @@ export default function WishlistScreen() {
                   <View style={styles.cardDivider} />
 
                   <View style={styles.wishFooter}>
-                    <View>
+                    <View style={{ flex: 1, marginRight: 8 }}>
                       <Text style={[styles.priceLabel, { color: colors.textMuted }]}>Target Price</Text>
-                      <Text style={[styles.priceVal, { color: colors.textMain }]}>
-                        Rs. {item.price.toLocaleString()}
+                      <Text style={[styles.priceVal, { color: colors.textMain }]} numberOfLines={1} adjustsFontSizeToFit>
+                        {currencySymbol} {item.price.toLocaleString()}
                       </Text>
                     </View>
 
@@ -315,9 +317,7 @@ export default function WishlistScreen() {
                             {
                               color: item.isPurchased
                                 ? '#ffffff'
-                                : theme === 'kawaii'
-                                  ? '#2c352d'
-                                  : '#ffffff',
+                                : colors.textOnAccent,
                             },
                           ]}
                         >
@@ -479,7 +479,7 @@ export default function WishlistScreen() {
                     { backgroundColor: isSelected ? colors.primaryAccent : colors.bgSecondary },
                   ]}
                 >
-                  <Text style={[styles.priorityBtnText, { color: isSelected ? (theme === 'kawaii' ? '#2c352d' : '#ffffff') : colors.textMuted }]}>
+                  <Text style={[styles.priorityBtnText, { color: isSelected ? (colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214')) : colors.textMuted }]}>
                     {p.label}
                   </Text>
                 </TouchableOpacity>
@@ -489,7 +489,7 @@ export default function WishlistScreen() {
         </View>
 
         <View style={styles.formGroup}>
-          <Text style={[styles.inputLabel, { color: colors.textMain }]}>Estimated Price (Rs.)</Text>
+          <Text style={[styles.inputLabel, { color: colors.textMain }]}>Estimated Price ({currencySymbol})</Text>
           <TextInput
             style={[styles.input, { backgroundColor: colors.bgSecondary, color: colors.textMain, borderColor: colors.borderSoft }]}
             placeholder="175000"
@@ -515,7 +515,7 @@ export default function WishlistScreen() {
           onPress={handleAddWishlistSubmit}
           style={[styles.submitButton, { backgroundColor: colors.primaryAccent }]}
         >
-          <Text style={[styles.submitButtonText, { color: theme === 'kawaii' ? '#2c352d' : '#ffffff' }]}>
+          <Text style={[styles.submitButtonText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}>
             Add to Wishlist 🌟
           </Text>
         </TouchableOpacity>
@@ -581,7 +581,7 @@ export default function WishlistScreen() {
                   {previewImageItem.emoji} {previewImageItem.name}
                 </Text>
                 <Text style={{ fontSize: 14, fontWeight: '700', color: colors.primaryAccent }}>
-                  Target Price: Rs. {previewImageItem.price.toLocaleString()} • {previewImageItem.targetDate}
+                  Target Price: {currencySymbol} {previewImageItem.price.toLocaleString()} • {previewImageItem.targetDate}
                 </Text>
               </View>
             </View>

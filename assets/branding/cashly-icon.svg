@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a1926" />
+      <stop offset="50%" stop-color="#0e1724" />
+      <stop offset="100%" stop-color="#080d16" />
+    </linearGradient>
+
+    <!-- Squircle Border Gradient -->
+    <linearGradient id="borderGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#34d399" stop-opacity="0.8" />
+      <stop offset="50%" stop-color="#10b981" stop-opacity="0.3" />
+      <stop offset="100%" stop-color="#059669" stop-opacity="0.6" />
+    </linearGradient>
+
+    <!-- Cashly Primary Emerald Gradient -->
+    <linearGradient id="emeraldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6ee7b7" />
+      <stop offset="35%" stop-color="#10b981" />
+      <stop offset="100%" stop-color="#047857" />
+    </linearGradient>
+
+    <!-- Trend Arrow Accent Gradient -->
+    <linearGradient id="arrowGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#34d399" />
+      <stop offset="50%" stop-color="#6ee7b7" />
+      <stop offset="100%" stop-color="#a7f3d0" />
+    </linearGradient>
+
+    <!-- Glow Filter -->
+    <filter id="emeraldGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="16" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+
+    <filter id="softShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000000" flood-opacity="0.5" />
+    </filter>
+  </defs>
+
+  <!-- Squircle Base -->
+  <rect x="24" y="24" width="464" height="464" rx="112" fill="url(#bgGrad)" stroke="url(#borderGrad)" stroke-width="4" filter="url(#softShadow)" />
+
+  <!-- Ambient Internal Glow Behind the Mark -->
+  <circle cx="270" cy="245" r="140" fill="#10b981" opacity="0.12" filter="url(#emeraldGlow)" />
+
+  <!-- The Cashly 'C' & Upward Financial Growth Track -->
+  <g transform="translate(256, 256) scale(0.92) translate(-256, -256)">
+    <!-- Outer Arc of 'C' -->
+    <path d="M 330 155 C 305 132 270 120 230 120 C 152 120 90 182 90 260 C 90 338 152 400 230 400 C 295 400 350 355 365 295"
+          fill="none"
+          stroke="url(#emeraldGrad)"
+          stroke-width="36"
+          stroke-linecap="round"
+          stroke-linejoin="round" />
+
+    <!-- Inner Financial Surge Curve leading into Arrow -->
+    <path d="M 180 320 C 160 290 160 230 190 195 C 220 160 270 165 295 195 L 345 255 L 405 175"
+          fill="none"
+          stroke="url(#arrowGrad)"
+          stroke-width="34"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          filter="url(#emeraldGlow)" />
+
+    <!-- Upward Trend Arrow Head -->
+    <polygon points="405,145 425,190 380,185" fill="#a7f3d0" />
+
+    <!-- Sparkle Stars -->
+    <g transform="translate(390, 115) scale(0.7)">
+      <path d="M0 -22 Q0 0 22 0 Q0 0 0 22 Q0 0 -22 0 Q0 0 0 -22 Z" fill="#ffffff" opacity="0.95" />
+    </g>
+    <g transform="translate(145, 150) scale(0.4)">
+      <path d="M0 -22 Q0 0 22 0 Q0 0 0 22 Q0 0 -22 0 Q0 0 0 -22 Z" fill="#6ee7b7" opacity="0.8" />
+    </g>
+  </g>
+</svg>

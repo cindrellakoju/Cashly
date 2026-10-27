@@ -32,6 +32,7 @@ export default function AccountsScreen() {
     setSalaryAccountId,
     togglePrivacyMask,
     totalNetWorth,
+    currencySymbol,
     accounts,
     transfers,
     transactions,
@@ -302,8 +303,8 @@ export default function AccountsScreen() {
               }}
               style={[styles.unlockButton, { backgroundColor: colors.primaryAccent }]}
             >
-              <Ionicons name="key" size={18} color={theme === 'kawaii' ? '#2c352d' : '#ffffff'} />
-              <Text style={[styles.unlockButtonText, { color: theme === 'kawaii' ? '#2c352d' : '#ffffff' }]}>
+              <Ionicons name="key" size={18} color={colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214')} />
+              <Text style={[styles.unlockButtonText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}>
                 Unlock Account Vault 🔑
               </Text>
             </TouchableOpacity>
@@ -320,7 +321,7 @@ export default function AccountsScreen() {
           title="Account Vault Access"
           subtitle="Enter 4-Digit Security PIN to Access Banking Records"
           icon="🏦"
-          hintText="Default PIN: 1234"
+          pinType="account"
           onVerify={verifyAccountPin}
         />
       </SafeAreaView>
@@ -353,9 +354,9 @@ export default function AccountsScreen() {
       {/* 3-Section Segment Switcher */}
       <SegmentedControl<AccountSegment>
         options={[
-          { key: 'balances', label: 'Amounts 🪙' },
-          { key: 'transfers', label: 'Own Transfer 🔄' },
-          { key: 'transactions', label: 'Transactions 📜' },
+          { key: 'balances', label: 'Amounts' },
+          { key: 'transfers', label: 'Own Transfer' },
+          { key: 'transactions', label: 'Transactions' },
         ]}
         selectedKey={activeSegment}
         onSelect={setActiveSegment}
@@ -363,6 +364,8 @@ export default function AccountsScreen() {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         contentContainerStyle={styles.scrollContent}
       >
         {/* ===================== SUBVIEW 1: AMOUNTS & BALANCES ===================== */}
@@ -372,9 +375,9 @@ export default function AccountsScreen() {
             <View style={[styles.netWorthCard, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft, borderWidth: 1, ...colors.cardShadow }]}>
               <View style={styles.netWorthHeader}>
                 <View>
-                  <Text style={[styles.netWorthLabel, { color: colors.textMuted }]}>Total Liquid Net Worth 🪙</Text>
-                  <Text style={[styles.netWorthValue, { color: colors.textMain }]}>
-                    {isPrivacyMasked ? 'Rs. ••••••••' : `Rs. ${totalNetWorth.toLocaleString()}`}
+                  <Text style={[styles.netWorthLabel, { color: colors.textMuted }]}>Total Net Worth</Text>
+                  <Text style={[styles.netWorthValue, { color: colors.textMain }]} numberOfLines={1} adjustsFontSizeToFit>
+                    {isPrivacyMasked ? `${currencySymbol} ••••••••` : `${currencySymbol} ${totalNetWorth.toLocaleString()}`}
                   </Text>
                 </View>
 
@@ -490,8 +493,8 @@ export default function AccountsScreen() {
                           adjustsFontSizeToFit
                         >
                           {isPrivacyMasked
-                            ? 'Rs. •••••'
-                            : `${isNegative ? '-' : ''}Rs. ${Math.abs(acc.balance).toLocaleString()}`}
+                            ? `${currencySymbol} •••••`
+                            : `${isNegative ? '-' : ''}${currencySymbol} ${Math.abs(acc.balance).toLocaleString()}`}
                         </Text>
                       </View>
                     </View>
@@ -522,7 +525,7 @@ export default function AccountsScreen() {
                 onPress={() => setIsTransferModalOpen(true)}
                 style={[styles.actionCircleBtn, { backgroundColor: colors.primaryAccent }]}
               >
-                <Ionicons name="add" size={22} color={theme === 'kawaii' ? '#2c352d' : '#ffffff'} />
+                <Ionicons name="add" size={22} color={colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214')} />
               </TouchableOpacity>
             </View>
 
@@ -548,7 +551,7 @@ export default function AccountsScreen() {
                         </Text>
                       </View>
                       <Text style={[styles.transferAmount, { color: colors.activeTabTint }]}>
-                        Rs. {item.amount.toLocaleString()}
+                        {currencySymbol} {item.amount.toLocaleString()}
                       </Text>
                     </View>
 
@@ -572,7 +575,7 @@ export default function AccountsScreen() {
                 <Ionicons name="search" size={16} color={colors.textSubtle} />
                 <TextInput
                   style={[styles.searchInput, { color: colors.textMain }]}
-                  placeholder="Search master ledger..."
+                  placeholder="Search .........."
                   placeholderTextColor={colors.textSubtle}
                   value={txSearch}
                   onChangeText={setTxSearch}
@@ -583,7 +586,7 @@ export default function AccountsScreen() {
                 onPress={() => setIsTxModalOpen(true)}
                 style={[styles.actionCircleBtn, { backgroundColor: colors.primaryAccent }]}
               >
-                <Ionicons name="add" size={22} color={theme === 'kawaii' ? '#2c352d' : '#ffffff'} />
+                <Ionicons name="add" size={22} color={colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214')} />
               </TouchableOpacity>
             </View>
 
@@ -611,9 +614,7 @@ export default function AccountsScreen() {
                         styles.filterPillText,
                         {
                           color: isSelected
-                            ? theme === 'kawaii'
-                              ? '#2c352d'
-                              : '#ffffff'
+                            ? colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214')
                             : colors.textMuted,
                           fontWeight: isSelected ? '800' : '600',
                         },
@@ -671,7 +672,7 @@ export default function AccountsScreen() {
                             { color: isIncoming ? colors.primaryGreen : colors.danger },
                           ]}
                         >
-                          {isIncoming ? '+' : '-'}Rs. {tx.amount.toLocaleString()}
+                          {isIncoming ? '+' : '-'}{currencySymbol} {tx.amount.toLocaleString()}
                         </Text>
                       </View>
 
@@ -714,7 +715,7 @@ export default function AccountsScreen() {
 
           <View style={styles.formGroup}>
             <Text style={[styles.inputLabel, { color: colors.textMain }]}>
-              Initial Cash in Hand Amount (Rs.)
+              Initial Cash in Hand Amount ({currencySymbol})
             </Text>
             <TextInput
               style={[
@@ -810,7 +811,7 @@ export default function AccountsScreen() {
                   { backgroundColor: accType === t ? colors.primaryAccent : colors.bgSecondary },
                 ]}
               >
-                <Text style={[styles.choiceChipText, { color: accType === t ? (theme === 'kawaii' ? '#2c352d' : '#ffffff') : colors.textMuted }]}>
+                <Text style={[styles.choiceChipText, { color: accType === t ? (colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214')) : colors.textMuted }]}>
                   {t.toUpperCase()}
                 </Text>
               </TouchableOpacity>
@@ -819,7 +820,7 @@ export default function AccountsScreen() {
         </View>
 
         <View style={styles.formGroup}>
-          <Text style={[styles.inputLabel, { color: colors.textMain }]}>Initial Balance (Rs.)</Text>
+          <Text style={[styles.inputLabel, { color: colors.textMain }]}>Initial Balance ({currencySymbol})</Text>
           <TextInput
             style={[styles.input, { backgroundColor: colors.bgSecondary, color: colors.textMain, borderColor: colors.borderSoft }]}
             placeholder="25000"
@@ -861,7 +862,7 @@ export default function AccountsScreen() {
           onPress={handleAddAccountSubmit}
           style={[styles.submitButton, { backgroundColor: colors.primaryAccent }]}
         >
-          <Text style={[styles.submitButtonText, { color: theme === 'kawaii' ? '#2c352d' : '#ffffff' }]}>
+          <Text style={[styles.submitButtonText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}>
             Create Account 💼
           </Text>
         </TouchableOpacity>
@@ -887,7 +888,7 @@ export default function AccountsScreen() {
                   { backgroundColor: transFrom === acc.name ? colors.primaryAccent : colors.bgSecondary },
                 ]}
               >
-                <Text style={[styles.choiceChipText, { color: transFrom === acc.name ? (theme === 'kawaii' ? '#2c352d' : '#ffffff') : colors.textMuted }]}>
+                <Text style={[styles.choiceChipText, { color: transFrom === acc.name ? (colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214')) : colors.textMuted }]}>
                   {acc.emoji} {acc.name}
                 </Text>
               </TouchableOpacity>
@@ -907,7 +908,7 @@ export default function AccountsScreen() {
                   { backgroundColor: transTo === acc.name ? colors.primaryGreen : colors.bgSecondary },
                 ]}
               >
-                <Text style={[styles.choiceChipText, { color: transTo === acc.name ? '#ffffff' : colors.textMuted }]}>
+                <Text style={[styles.choiceChipText, { color: transTo === acc.name ? (theme === 'noir' ? '#121214' : '#ffffff') : colors.textMuted }]}>
                   {acc.emoji} {acc.name}
                 </Text>
               </TouchableOpacity>
@@ -916,7 +917,7 @@ export default function AccountsScreen() {
         </View>
 
         <View style={styles.formGroup}>
-          <Text style={[styles.inputLabel, { color: colors.textMain }]}>Transfer Amount (Rs.)</Text>
+          <Text style={[styles.inputLabel, { color: colors.textMain }]}>Transfer Amount ({currencySymbol})</Text>
           <TextInput
             style={[styles.input, { backgroundColor: colors.bgSecondary, color: colors.textMain, borderColor: colors.borderSoft }]}
             placeholder="2000"
@@ -942,7 +943,7 @@ export default function AccountsScreen() {
           onPress={handleAddTransferSubmit}
           style={[styles.submitButton, { backgroundColor: colors.primaryAccent }]}
         >
-          <Text style={[styles.submitButtonText, { color: theme === 'kawaii' ? '#2c352d' : '#ffffff' }]}>
+          <Text style={[styles.submitButtonText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}>
             Execute Transfer 🔄
           </Text>
         </TouchableOpacity>
@@ -968,7 +969,7 @@ export default function AccountsScreen() {
                   { backgroundColor: txType === type ? colors.primaryAccent : colors.bgSecondary },
                 ]}
               >
-                <Text style={[styles.choiceChipText, { color: txType === type ? (theme === 'kawaii' ? '#2c352d' : '#ffffff') : colors.textMuted }]}>
+                <Text style={[styles.choiceChipText, { color: txType === type ? (colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214')) : colors.textMuted }]}>
                   {type}
                 </Text>
               </TouchableOpacity>
@@ -977,7 +978,7 @@ export default function AccountsScreen() {
         </View>
 
         <View style={styles.formGroup}>
-          <Text style={[styles.inputLabel, { color: colors.textMain }]}>Amount (Rs.)</Text>
+          <Text style={[styles.inputLabel, { color: colors.textMain }]}>Amount ({currencySymbol})</Text>
           <TextInput
             style={[styles.input, { backgroundColor: colors.bgSecondary, color: colors.textMain, borderColor: colors.borderSoft }]}
             placeholder="500"
@@ -1036,7 +1037,7 @@ export default function AccountsScreen() {
           onPress={handleAddTxSubmit}
           style={[styles.submitButton, { backgroundColor: colors.primaryAccent }]}
         >
-          <Text style={[styles.submitButtonText, { color: theme === 'kawaii' ? '#2c352d' : '#ffffff' }]}>
+          <Text style={[styles.submitButtonText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}>
             Save Master Transaction 📜
           </Text>
         </TouchableOpacity>
@@ -1052,7 +1053,7 @@ export default function AccountsScreen() {
         title="Account Vault Access"
         subtitle="Enter 4-Digit Security PIN to Access Banking Records"
         icon="🏦"
-        hintText="Default PIN: 1234"
+        pinType="account"
         onVerify={verifyAccountPin}
       />
     </SafeAreaView>

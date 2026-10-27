@@ -1,28 +1,27 @@
 {
   "expo": {
-    "name": "ExpenseTracker",
-    "slug": "ExpenseTracker",
+    "name": "Cashly",
+    "slug": "cashly",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "expensetracker",
+    "scheme": "cashly",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#FDF9EE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.RECORD_AUDIO"
-      ]
+      ],
+      "package": "com.cindrella.cashly"
     },
     "web": {
       "output": "static",
@@ -36,9 +35,9 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
+          "backgroundColor": "#FDF9EE",
           "dark": {
-            "backgroundColor": "#000000"
+            "backgroundColor": "#1F1F23"
           }
         }
       ],
@@ -61,10 +60,15 @@
       "reactCompiler": true
     },
     "extra": {
-      "router": {},
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
       "eas": {
-        "projectId": "eaf26c11-03f4-44f7-86f8-1593f725bac2"
+        "projectId": "562df02b-ab94-419f-a6d8-2b50de7230ea"
       }
-    }
+    },
+    "owner": "cindrella"
   }
 }

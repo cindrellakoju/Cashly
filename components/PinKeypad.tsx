@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { useFinancial } from '@/context/FinancialContext';
@@ -9,9 +9,12 @@ interface PinKeypadProps {
 }
 
 export const PinKeypad: React.FC<PinKeypadProps> = ({ onSuccess }) => {
-  const { colors, stickers, unlockVault } = useFinancial();
+  const { colors, unlockVault, accountPin, recoveryEmail, recoverPinViaEmail } = useFinancial();
   const [pin, setPin] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string>('');
+  const [isRecovering, setIsRecovering] = useState<boolean>(false);
+
+  const isDefaultPin = accountPin === '1234';
 
   const handleDigitPress = (digit: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -28,7 +31,7 @@ export const PinKeypad: React.FC<PinKeypadProps> = ({ onSuccess }) => {
             onSuccess();
           } else {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-            setErrorMsg('Incorrect PIN. Try default: 1234');
+            setErrorMsg(isDefaultPin ? 'Incorrect PIN. Try default: 1234' : 'Incorrect PIN. Please try again.');
             setPin('');
           }
         }, 150);
@@ -42,6 +45,48 @@ export const PinKeypad: React.FC<PinKeypadProps> = ({ onSuccess }) => {
     setPin((prev) => prev.slice(0, -1));
   };
 
+  const handleForgotPin = () => {
+    if (!recoveryEmail || !recoveryEmail.trim()) {
+      Alert.alert('Forgot PIN', 'No recovery email is linked. Default PIN is 1234.');
+      return;
+    }
+
+    Alert.alert(
+      'Reset & Recover PIN',
+      `Would you like to reset your PIN and receive the new PIN at your recovery email:\n\n${recoveryEmail}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset & Send',
+          style: 'destructive',
+          onPress: async () => {
+            setIsRecovering(true);
+            try {
+              const res = await recoverPinViaEmail('account');
+              if (res.success) {
+                Alert.alert(
+                  'New PIN Sent! ✉️',
+                  `A new 4-digit PIN has been generated and sent to ${recoveryEmail}. Please check your inbox.`
+                );
+              } else if (res.newPin) {
+                Alert.alert(
+                  'PIN Reset 🔑',
+                  `Your PIN has been reset to: ${res.newPin}\n\n(Note: Email dispatch server is offline, so your new PIN is displayed here. Please save it.)`
+                );
+              } else {
+                Alert.alert('Error', res.message || 'Failed to reset PIN.');
+              }
+            } catch (e: any) {
+              Alert.alert('Error', e?.message || 'Failed to recover PIN.');
+            } finally {
+              setIsRecovering(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const digits = [
     ['1', '2', '3'],
     ['4', '5', '6'],
@@ -51,9 +96,9 @@ export const PinKeypad: React.FC<PinKeypadProps> = ({ onSuccess }) => {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bgPrimary }]}>
-      {/* Mascot Sticker */}
-      <View style={[styles.stickerWrapper, { borderColor: colors.borderAccent || colors.primaryAccent }]}>
-        <Image source={stickers.vault} style={styles.stickerImage} resizeMode="cover" />
+      {/* Secure Vault Badge */}
+      <View style={[styles.vaultIconWrapper, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft }]}>
+        <Ionicons name="lock-closed" size={32} color={colors.primaryAccent} />
       </View>
 
       <Text style={[styles.title, { color: colors.textMain }]}>Secure Account Vault 🔒</Text>
@@ -82,8 +127,10 @@ export const PinKeypad: React.FC<PinKeypadProps> = ({ onSuccess }) => {
 
       {errorMsg ? (
         <Text style={[styles.errorText, { color: colors.danger }]}>{errorMsg}</Text>
-      ) : (
+      ) : isDefaultPin ? (
         <Text style={[styles.hintText, { color: colors.textSubtle }]}>Default PIN: 1234</Text>
+      ) : (
+        <View style={styles.hintPlaceholder} />
       )}
 
       {/* Numeric Keypad Grid */}
@@ -123,6 +170,20 @@ export const PinKeypad: React.FC<PinKeypadProps> = ({ onSuccess }) => {
           </View>
         ))}
       </View>
+
+      {recoveryEmail && recoveryEmail.trim().length > 0 && (
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={handleForgotPin}
+          style={styles.forgotBtn}
+          disabled={isRecovering}
+        >
+          <Ionicons name="help-circle-outline" size={16} color={colors.textMuted} />
+          <Text style={[styles.forgotBtnText, { color: colors.textMuted }]}>
+            {isRecovering ? 'Resetting PIN...' : 'Forgot PIN?'}
+          </Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 };
@@ -134,22 +195,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 28,
   },
-  stickerWrapper: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    borderWidth: 3,
-    overflow: 'hidden',
+  vaultIconWrapper: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.2,
+    shadowColor: '#3c5a41',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
     shadowRadius: 8,
-    elevation: 5,
-  },
-  stickerImage: {
-    width: '100%',
-    height: '100%',
+    elevation: 3,
   },
   title: {
     fontSize: 22,
@@ -186,6 +244,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 24,
   },
+  hintPlaceholder: {
+    height: 16,
+    marginBottom: 24,
+  },
   keypadGrid: {
     width: '100%',
     maxWidth: 280,
@@ -208,6 +270,18 @@ const styles = StyleSheet.create({
   },
   keyText: {
     fontSize: 24,
+    fontWeight: '700',
+  },
+  forgotBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 18,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  forgotBtnText: {
+    fontSize: 14,
     fontWeight: '700',
   },
 });

@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Linking from 'expo-linking';
 import { AppTheme, THEMES, ThemeColors, THEME_STICKERS, ThemeStickers } from '@/constants/theme';
+import { sendPinRecoveryEmail } from '@/services/emailService';
 
 export type TransactionType =
   | 'Expense'
@@ -44,6 +46,7 @@ export interface Expense {
   reason: string;
   stored: string;
   type: 'outgoing';
+  recurringBillId?: string;
 }
 
 export interface InstallmentPayment {
@@ -153,16 +156,10 @@ export const extractDayFromDate = (dateStr?: string): number | null => {
 };
 
 // Initial Defaults - Cash Envelopes (Expected Money to Spend)
-const INITIAL_ENVELOPES: CashEnvelope[] = [
-  { id: '1', name: 'Food', emoji: '🍔', color: '#f3b06c', budgeted: 0 },
-  { id: '2', name: 'Coffee', emoji: '☕', color: '#c45167', budgeted: 0 },
-  { id: '3', name: 'Transport', emoji: '🚗', color: '#56a76e', budgeted: 0 },
-  { id: '4', name: 'Shopping', emoji: '🛍️', color: '#f2738a', budgeted: 0 },
-  { id: '5', name: 'Utilities', emoji: '🏠', color: '#7ab583', budgeted: 0 },
-  { id: '6', name: 'Fun', emoji: '🍿', color: '#9d7be2', budgeted: 0 },
-];
+// By default, cash envelopes start empty. The 6 default categories are only seeded for Admin Categories.
+const INITIAL_ENVELOPES: CashEnvelope[] = [];
 
-// Initial Defaults - General Expense Categories (Tags for Expenses)
+// Initial Defaults - General Expense Categories (Tags for Expenses in Admin Access)
 const INITIAL_CATEGORIES: Category[] = [
   { id: '1', name: 'Food', emoji: '🍔', color: '#f3b06c' },
   { id: '2', name: 'Coffee', emoji: '☕', color: '#c45167' },
@@ -170,10 +167,6 @@ const INITIAL_CATEGORIES: Category[] = [
   { id: '4', name: 'Shopping', emoji: '🛍️', color: '#f2738a' },
   { id: '5', name: 'Utilities', emoji: '🏠', color: '#7ab583' },
   { id: '6', name: 'Fun', emoji: '🍿', color: '#9d7be2' },
-  { id: '7', name: 'Salary', emoji: '💼', color: '#65a865' },
-  { id: '8', name: 'Health', emoji: '💊', color: '#e06d86' },
-  { id: '9', name: 'Education', emoji: '📚', color: '#5b9bd5' },
-  { id: '10', name: 'Gaming', emoji: '🎮', color: '#8338ec' },
 ];
 
 const INITIAL_INCOMES: Income[] = [];
@@ -237,7 +230,7 @@ interface FinancialContextType {
   lockAdminMode: () => void;
 
   // Actions
-  setTheme: (theme: AppTheme) => void;
+  setTheme: (theme: AppTheme) => Promise<void> | void;
   setCurrencySymbol: (symbol: string) => void;
   unlockVault: (pin: string) => boolean;
   lockVault: () => void;
@@ -253,6 +246,13 @@ interface FinancialContextType {
   skipBaseSalary: () => Promise<void>;
   salaries: SalaryRecord[];
   initialCashInHand: number;
+  showMonthlyBills: boolean;
+  setShowMonthlyBills: (show: boolean) => Promise<void>;
+  toggleShowMonthlyBills: () => Promise<void>;
+  recoveryEmail: string;
+  setRecoveryEmail: (email: string) => Promise<void>;
+  recoverPinViaEmail: (target: 'admin' | 'account') => Promise<{ success: boolean; newPin?: string; email?: string; error?: string; message?: string }>;
+  linkAndRecoverPinViaEmail: (target: 'admin' | 'account', email: string) => Promise<{ success: boolean; newPin?: string; email?: string; error?: string }>;
   activeMonthSalary: number;
   getSalaryForMonth: (monthKey: string) => { amount: number; day: string; accountId?: string; accountName?: string };
   setCashInHandInitialMoney: (amount: number) => Promise<void>;
@@ -262,6 +262,8 @@ interface FinancialContextType {
   hasCompletedOnboarding: boolean;
   completeOnboarding: () => Promise<void>;
   markWelcomeShown: () => Promise<void>;
+  isWelcomeActive: boolean;
+  setIsWelcomeActive: (active: boolean) => void;
   isSalaryLoaded: boolean;
   daysUntilPayday: number;
   loadSalaryNow: (monthKey?: string) => Promise<void>;
@@ -296,6 +298,7 @@ interface FinancialContextType {
   updateTransaction: (id: string, txData: Partial<Transaction>) => void;
   deleteTransaction: (id: string) => void;
   resetDatabase: () => Promise<void>;
+  resetPINs: () => Promise<void>;
   exportDataBackup: () => Promise<string>;
   importDataBackup: (jsonString: string) => Promise<{ success: boolean; message: string; counts?: Record<string, number> }>;
   reloadAllDataFromDB: () => Promise<void>;
@@ -346,15 +349,18 @@ import {
   updateSalaryRecordInDB,
   removeSalaryRecord,
   saveInitialCashInHand,
+  clearPINsInDatabase,
+  markOnboardingCompleted,
 } from '@/services/database';
 
 const FinancialContext = createContext<FinancialContextType | undefined>(undefined);
 
 export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isDbLoaded, setIsDbLoaded] = useState<boolean>(false);
-  const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState<boolean>(true);
-  const theme: AppTheme = 'kawaii';
-  const [currencySymbol, setCurrencySymbolState] = useState<string>('$ ');
+  const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState<boolean>(false);
+  const [isWelcomeActive, setIsWelcomeActive] = useState<boolean>(true);
+  const [theme, setThemeState] = useState<AppTheme>('kawaii');
+  const [currencySymbol, setCurrencySymbolState] = useState<string>('Rs.');
   const [salary, setSalary] = useState<number>(0);
   const [hasBaseSalary, setHasBaseSalary] = useState<boolean | null>(null);
   const [baseSalaryDate, setBaseSalaryDate] = useState<string>('1');
@@ -363,6 +369,7 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [pinCode, setPinCodeState] = useState<string>('1234');
   const [adminPin, setAdminPinState] = useState<string>('1234');
   const [accountPin, setAccountPinState] = useState<string>('1234');
+  const [recoveryEmail, setRecoveryEmailState] = useState<string>('');
   const [salaryAccountId, setSalaryAccountIdState] = useState<string | null>(null);
   const [manuallyLoadedMonths, setManuallyLoadedMonths] = useState<string[]>([]);
   const [creditedSalaryMonths, setCreditedSalaryMonths] = useState<string[]>([]);
@@ -374,7 +381,7 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const completeOnboarding = async () => {
     setHasCompletedOnboarding(true);
-    await markWelcomeAsShown();
+    await markOnboardingCompleted();
   };
 
   const markWelcomeShown = async () => {
@@ -394,6 +401,18 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [transactions, setTransactions] = useState<Transaction[]>(INITIAL_TRANSACTIONS);
   const [salaries, setSalaries] = useState<SalaryRecord[]>([]);
   const [initialCashInHand, setInitialCashInHand] = useState<number>(0);
+  const [showMonthlyBills, setShowMonthlyBillsState] = useState<boolean>(true);
+
+  const setShowMonthlyBills = async (show: boolean) => {
+    setShowMonthlyBillsState(show);
+    await saveAppSetting('show_monthly_bills', show ? 'true' : 'false');
+  };
+
+  const toggleShowMonthlyBills = async () => {
+    const next = !showMonthlyBills;
+    setShowMonthlyBillsState(next);
+    await saveAppSetting('show_monthly_bills', next ? 'true' : 'false');
+  };
 
   // Load SQLite database on boot
   useEffect(() => {
@@ -423,8 +442,13 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           transactions: INITIAL_TRANSACTIONS,
           salaries: [],
           initialCashInHand: 0,
+          showMonthlyBills: true,
+          recoveryEmail: '',
         };
         const loaded = await initDatabase(defaultData);
+        if (loaded.theme) {
+          setThemeState(loaded.theme);
+        }
         setCurrencySymbolState(loaded.currencySymbol);
         setSalary(loaded.salary);
         setHasBaseSalary(loaded.hasBaseSalary ?? null);
@@ -432,8 +456,11 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setPinCodeState(loaded.accountPin || loaded.pinCode || '1234');
         setAdminPinState(loaded.adminPin || '1234');
         setAccountPinState(loaded.accountPin || loaded.pinCode || '1234');
+        setRecoveryEmailState(loaded.recoveryEmail || '');
         setSalaryAccountIdState(loaded.salaryAccountId || null);
-        setHasCompletedOnboarding(loaded.hasCompletedOnboarding ?? false);
+        const isFinished = loaded.hasCompletedOnboarding ?? false;
+        setHasCompletedOnboarding(isFinished);
+        setIsWelcomeActive(!isFinished);
         setManuallyLoadedMonths(loaded.manuallyLoadedMonths || []);
         setCreditedSalaryMonths(loaded.creditedSalaryMonths || []);
         setEnvelopes(loaded.envelopes);
@@ -447,6 +474,9 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setTransactions(loaded.transactions);
         setSalaries(loaded.salaries || []);
         setInitialCashInHand(loaded.initialCashInHand || 0);
+        if (loaded.showMonthlyBills !== undefined) {
+          setShowMonthlyBillsState(loaded.showMonthlyBills);
+        }
         setIsDbLoaded(true);
       } catch (err) {
         console.warn('Failed to load SQLite database:', err);
@@ -455,12 +485,15 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, []);
 
   const isResettingRef = useRef<boolean>(false);
+  const isSyncingRef = useRef<boolean>(false);
+  const pendingSyncRef = useRef<boolean>(false);
+  const latestStateRef = useRef<any>(null);
 
-  // Sync to SQLite database when state changes after initial boot load
+  // Sync to SQLite database when state changes after initial boot load (debounced & serialized)
   useEffect(() => {
     if (!isDbLoaded || isResettingRef.current) return;
 
-    const stateToSave = {
+    latestStateRef.current = {
       theme,
       currencySymbol,
       salary,
@@ -481,10 +514,32 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       transactions,
       salaries,
       initialCashInHand,
+      showMonthlyBills,
     };
-    seedDatabase(stateToSave).catch((err) => {
-      console.warn('Failed to sync state to SQLite:', err);
-    });
+
+    const runSync = async () => {
+      if (isSyncingRef.current) {
+        pendingSyncRef.current = true;
+        return;
+      }
+      isSyncingRef.current = true;
+      try {
+        do {
+          pendingSyncRef.current = false;
+          const toSave = latestStateRef.current;
+          if (toSave) {
+            await seedDatabase(toSave);
+          }
+        } while (pendingSyncRef.current);
+      } catch (err) {
+        console.warn('Failed to sync state to SQLite:', err);
+      } finally {
+        isSyncingRef.current = false;
+      }
+    };
+
+    const timer = setTimeout(runSync, 300);
+    return () => clearTimeout(timer);
   }, [
     isDbLoaded,
     theme,
@@ -498,6 +553,7 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     salaryAccountId,
     salaries,
     initialCashInHand,
+    showMonthlyBills,
     envelopes,
     categories,
     incomes,
@@ -509,8 +565,9 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     transactions,
   ]);
 
-  const setTheme = (_t?: AppTheme) => {
-    // Kawaii Pastel is the permanent fixed theme
+  const setTheme = async (newTheme: AppTheme) => {
+    setThemeState(newTheme);
+    await saveAppSetting('theme', newTheme);
   };
 
   const verifyAdminPin = (entered: string): boolean => {
@@ -553,6 +610,94 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     await saveAppSetting('pinCode', newPin);
   };
 
+  const setRecoveryEmail = async (email: string) => {
+    const cleaned = email.trim().toLowerCase();
+    setRecoveryEmailState(cleaned);
+    await saveAppSetting('recovery_email', cleaned);
+  };
+
+  const recoverPinViaEmail = async (
+    target: 'admin' | 'account'
+  ): Promise<{ success: boolean; newPin?: string; email?: string; error?: string; message?: string }> => {
+    const cleanEmail = (recoveryEmail && recoveryEmail.trim()) || '';
+    if (!cleanEmail) {
+      return {
+        success: false,
+        error: 'NO_EMAIL_LINKED',
+        message: 'No recovery email has been linked yet. Please link your email in Admin Settings first.',
+      };
+    }
+
+    const newPin = Math.floor(1000 + Math.random() * 9000).toString();
+
+    // 1. Update SQLite database with new PIN
+    if (target === 'admin') {
+      await setAdminPin(newPin);
+    } else {
+      await setAccountPin(newPin);
+    }
+
+    // 2. Dispatch email via system Gmail SMTP service using Google App Password in .env
+    const emailResult = await sendPinRecoveryEmail({
+      target,
+      newPin,
+      recipientEmail: cleanEmail,
+    });
+
+    if (emailResult.success) {
+      return {
+        success: true,
+        newPin,
+        email: cleanEmail,
+        message: emailResult.message || 'PIN email dispatched successfully via Gmail SMTP!',
+      };
+    }
+
+    return {
+      success: false,
+      newPin,
+      email: cleanEmail,
+      error: emailResult.error || 'SMTP_FAILED',
+      message: emailResult.message || 'Failed to dispatch email via Gmail SMTP',
+    };
+  };
+
+  const linkAndRecoverPinViaEmail = async (
+    target: 'admin' | 'account',
+    email: string
+  ): Promise<{ success: boolean; newPin?: string; email?: string; error?: string }> => {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      return { success: false, error: 'INVALID_EMAIL' };
+    }
+    await setRecoveryEmail(cleanEmail);
+    const newPin = Math.floor(1000 + Math.random() * 9000).toString();
+
+    if (target === 'admin') {
+      await setAdminPin(newPin);
+    } else {
+      await setAccountPin(newPin);
+    }
+
+    const pinLabel = target === 'admin' ? 'Admin Access' : 'Account Vault';
+    const subject = encodeURIComponent(`Your New ${pinLabel} PIN - Expense Tracker`);
+    const body = encodeURIComponent(
+      `Hello,\n\nYour recovery email has been linked and your 4-digit ${pinLabel} PIN for Expense Tracker has been successfully reset upon request.\n\nYour New PIN: ${newPin}\n\nPlease use this new PIN to unlock your ${pinLabel}.\n\n- Expense Tracker Security`
+    );
+    const mailtoUrl = `mailto:${cleanEmail}?subject=${subject}&body=${body}`;
+
+    try {
+      const canOpen = await Linking.canOpenURL(mailtoUrl);
+      if (canOpen) {
+        await Linking.openURL(mailtoUrl);
+      }
+    } catch (e) {
+      console.warn('Could not launch email client automatically', e);
+    }
+
+    return { success: true, newPin, email: cleanEmail };
+  };
+
   const setSalaryAccountId = async (accId: string | null) => {
     setSalaryAccountIdState(accId);
     if (accId) {
@@ -567,7 +712,11 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const setCurrencySymbol = (symbol: string) => {
-    setCurrencySymbolState(symbol);
+    const clean = symbol.trim() || 'Rs.';
+    setCurrencySymbolState(clean);
+    saveAppSetting('currencySymbol', clean).catch((err) => {
+      console.warn('Failed to save currencySymbol to SQLite:', err);
+    });
   };
 
   const [selectedMonth, setSelectedMonth] = useState<string>(getCurrentMonthKey());
@@ -866,20 +1015,40 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     // Salary HAS arrived (or was force-loaded)
     // 1. Record salary record in salaries table for this month
-    const salaryRec: SalaryRecord = {
-      id: `salary_rec_${monthKey}`,
-      month: monthKey,
-      amount: effectiveAmount,
-      day: effectiveDay,
-      accountId: salaryAcc?.id,
-      accountName: targetAccountName,
-      createdAt: new Date().toISOString(),
-    };
-    insertSalaryRecord(salaryRec);
-    setSalaries((prev) => {
-      const filtered = prev.filter((s) => s.month !== monthKey);
-      return [...filtered, salaryRec].sort((a, b) => a.month.localeCompare(b.month));
-    });
+    const existingSal = salaries.find((s) => s.month === monthKey);
+    const isSameSal =
+      existingSal &&
+      existingSal.amount === effectiveAmount &&
+      existingSal.day === effectiveDay &&
+      existingSal.accountId === salaryAcc?.id &&
+      existingSal.accountName === targetAccountName;
+
+    if (!isSameSal) {
+      const salaryRec: SalaryRecord = {
+        id: existingSal?.id || `salary_rec_${monthKey}`,
+        month: monthKey,
+        amount: effectiveAmount,
+        day: effectiveDay,
+        accountId: salaryAcc?.id,
+        accountName: targetAccountName,
+        createdAt: existingSal?.createdAt || new Date().toISOString(),
+      };
+      insertSalaryRecord(salaryRec);
+      setSalaries((prev) => {
+        const found = prev.find((s) => s.month === monthKey);
+        if (
+          found &&
+          found.amount === effectiveAmount &&
+          found.day === effectiveDay &&
+          found.accountId === salaryAcc?.id &&
+          found.accountName === targetAccountName
+        ) {
+          return prev;
+        }
+        const filtered = prev.filter((s) => s.month !== monthKey);
+        return [...filtered, salaryRec].sort((a, b) => a.month.localeCompare(b.month));
+      });
+    }
 
     // 2. Set income
     setIncomes((prev) => {
@@ -997,7 +1166,7 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const cfg = getSalaryForMonth(targetMonth);
       ensureBaseSalaryIncome(targetMonth, cfg.amount, cfg.day, manuallyLoadedMonths);
     }
-  }, [isDbLoaded, selectedMonth, hasBaseSalary, salary, baseSalaryDate, salaryAccountId, manuallyLoadedMonths, creditedSalaryMonths, getSalaryForMonth]);
+  }, [isDbLoaded, selectedMonth, hasBaseSalary, salary, baseSalaryDate, salaryAccountId, manuallyLoadedMonths, creditedSalaryMonths]);
 
   const configureBaseSalary = async (amount: number, dayStr: string, effectiveMonthKey?: string) => {
     setSalary(amount);
@@ -1040,9 +1209,9 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setSalaries((prev) => prev.filter((s) => s.id !== id));
     if (target) {
       setIncomes((prev) => prev.filter((i) => i.id !== `salary_${target.month}`));
-      removeIncome(`salary_${target.month}`).catch(() => {});
+      removeIncome(`salary_${target.month}`).catch(() => { });
       setTransactions((prev) => prev.filter((t) => t.id !== `salary_tx_${target.month}`));
-      removeTransaction(`salary_tx_${target.month}`).catch(() => {});
+      removeTransaction(`salary_tx_${target.month}`).catch(() => { });
     }
   };
 
@@ -1436,8 +1605,8 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     removeIncome(id).catch((err) => console.error('Failed to remove income:', err));
 
     if (target) {
-      removeTransaction(`tx_inc_${id}`).catch(() => {});
-      removeTransaction(id).catch(() => {});
+      removeTransaction(`tx_inc_${id}`).catch(() => { });
+      removeTransaction(id).catch(() => { });
       setTransactions((prev) => prev.filter((t) => t.id !== `tx_inc_${id}` && t.id !== id));
 
       setAccounts((prev) =>
@@ -1505,8 +1674,8 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     removeExpense(id).catch((err) => console.error('Failed to remove expense:', err));
 
     if (target) {
-      removeTransaction(`tx_exp_${id}`).catch(() => {});
-      removeTransaction(id).catch(() => {});
+      removeTransaction(`tx_exp_${id}`).catch(() => { });
+      removeTransaction(id).catch(() => { });
       setTransactions((prev) => prev.filter((t) => t.id !== `tx_exp_${id}` && t.id !== id));
 
       setAccounts((prev) =>
@@ -1611,6 +1780,23 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     removeTransaction(id).catch((err) => console.error('Failed to remove transaction:', err));
   };
 
+  const resetPINs = async () => {
+    isResettingRef.current = true;
+    try {
+      await clearPINsInDatabase();
+      setPinCodeState('1234');
+      setAdminPinState('1234');
+      setAccountPinState('1234');
+      setIsVaultUnlocked(false);
+      setIsAdminMode(false);
+      setRecoveryEmailState('');
+    } finally {
+      setTimeout(() => {
+        isResettingRef.current = false;
+      }, 500);
+    }
+  }
+
   const resetDatabase = async () => {
     isResettingRef.current = true;
     try {
@@ -1625,19 +1811,39 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       };
       await insertAccount(defaultCashInHand);
 
+      // Reset Security PINs to factory default ('1234')
+      setPinCodeState('1234');
+      setAdminPinState('1234');
+      setAccountPinState('1234');
+      setIsVaultUnlocked(false);
+      setIsAdminMode(false);
+      setRecoveryEmailState('');
+
+      // Reset Appearance & Preferences
+      setThemeState('kawaii');
+      setCurrencySymbolState('Rs.');
+      setShowMonthlyBillsState(true);
+
+      // Reset Financial States
       setSalary(0);
       setHasBaseSalary(null);
       setBaseSalaryDate('1');
       setHasCompletedOnboarding(false);
+      setIsWelcomeActive(true);
       setExpenses([]);
       setIncomes([]);
-      setCategories([]);
+      for (const cat of INITIAL_CATEGORIES) {
+        await insertCategory(cat);
+      }
+      setCategories(INITIAL_CATEGORIES);
       setEnvelopes([]);
       setAccounts([defaultCashInHand]);
       setDebts([]);
       setWishlist([]);
       setTransfers([]);
       setTransactions([]);
+      setSalaries([]);
+      setInitialCashInHand(0);
       setSalaryAccountIdState(null);
       setManuallyLoadedMonths([]);
       setCreditedSalaryMonths([]);
@@ -1674,8 +1880,12 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       transactions: INITIAL_TRANSACTIONS,
       salaries: [],
       initialCashInHand: 0,
+      recoveryEmail: '',
     };
     const loaded = await loadAllData(defaultData);
+    if (loaded.theme) {
+      setThemeState(loaded.theme);
+    }
     setCurrencySymbolState(loaded.currencySymbol);
     setSalary(loaded.salary);
     setHasBaseSalary(loaded.hasBaseSalary ?? null);
@@ -1683,8 +1893,11 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setPinCodeState(loaded.accountPin || loaded.pinCode || '1234');
     setAdminPinState(loaded.adminPin || '1234');
     setAccountPinState(loaded.accountPin || loaded.pinCode || '1234');
+    setRecoveryEmailState(loaded.recoveryEmail || '');
     setSalaryAccountIdState(loaded.salaryAccountId || null);
-    setHasCompletedOnboarding(loaded.hasCompletedOnboarding ?? false);
+    const isFinished = loaded.hasCompletedOnboarding ?? false;
+    setHasCompletedOnboarding(isFinished);
+    setIsWelcomeActive(!isFinished);
     setManuallyLoadedMonths(loaded.manuallyLoadedMonths || []);
     setCreditedSalaryMonths(loaded.creditedSalaryMonths || []);
     setEnvelopes(loaded.envelopes);
@@ -1730,6 +1943,9 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         skipBaseSalary,
         salaries,
         initialCashInHand,
+        showMonthlyBills,
+        setShowMonthlyBills,
+        toggleShowMonthlyBills,
         activeMonthSalary,
         getSalaryForMonth,
         setCashInHandInitialMoney,
@@ -1739,6 +1955,8 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         hasCompletedOnboarding,
         completeOnboarding,
         markWelcomeShown,
+        isWelcomeActive,
+        setIsWelcomeActive,
         isVaultUnlocked,
         isPrivacyMasked,
         pinCode,
@@ -1782,6 +2000,10 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setAccountPin,
         verifyAdminPin,
         verifyAccountPin,
+        recoveryEmail,
+        setRecoveryEmail,
+        recoverPinViaEmail,
+        linkAndRecoverPinViaEmail,
         setSalaryAccountId,
         isSalaryLoaded,
         daysUntilPayday,
@@ -1817,6 +2039,7 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         updateTransaction,
         deleteTransaction,
         resetDatabase,
+        resetPINs,
         exportDataBackup,
         importDataBackup,
         reloadAllDataFromDB,

@@ -78,9 +78,7 @@ export function SegmentedControl<T extends string>({
                     styles.badgeText,
                     {
                       color: isActive
-                        ? theme === 'kawaii'
-                          ? '#2c352d'
-                          : '#ffffff'
+                        ? colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214')
                         : colors.textMuted,
                     },
                   ]}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { AestheticModal } from './AestheticModal';
@@ -13,6 +13,7 @@ interface AdminPinModalProps {
   subtitle?: string;
   icon?: string;
   hintText?: string;
+  pinType?: 'admin' | 'account';
   onVerify?: (pin: string) => boolean;
 }
 
@@ -23,12 +24,35 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({
   title = 'Admin Access Required',
   subtitle = 'Enter 4-Digit Security PIN to Unlock Admin Rights',
   icon = '🔒',
-  hintText = 'Default PIN: 1234',
+  hintText,
+  pinType,
   onVerify,
 }) => {
-  const { colors, verifyAdminPin } = useFinancial();
+  const {
+    colors,
+    verifyAdminPin,
+    verifyAccountPin,
+    adminPin,
+    accountPin,
+    recoveryEmail,
+    recoverPinViaEmail,
+  } = useFinancial();
   const [pin, setPin] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string>('');
+  const [isRecovering, setIsRecovering] = useState<boolean>(false);
+
+  const isAccount = pinType ? pinType === 'account' : onVerify === verifyAccountPin;
+  const isDefaultPin = (isAccount ? accountPin : adminPin) === '1234';
+
+  const displayHint = (() => {
+    if (hintText !== undefined) {
+      if (hintText === 'Default PIN: 1234') {
+        return isDefaultPin ? 'Default PIN: 1234' : '';
+      }
+      return hintText;
+    }
+    return isDefaultPin ? 'Default PIN: 1234' : '';
+  })();
 
   const handleDigitPress = (digit: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -64,6 +88,49 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({
     setPin('');
     setErrorMsg('');
     onClose();
+  };
+
+  const handleForgotPin = () => {
+    if (!recoveryEmail || !recoveryEmail.trim()) {
+      Alert.alert('Forgot PIN', 'No recovery email is linked. Default PIN is 1234.');
+      return;
+    }
+
+    Alert.alert(
+      'Reset & Recover PIN',
+      `Would you like to reset your PIN and receive the new PIN at your recovery email:\n\n${recoveryEmail}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset & Send',
+          style: 'destructive',
+          onPress: async () => {
+            setIsRecovering(true);
+            try {
+              const target = isAccount ? 'account' : 'admin';
+              const res = await recoverPinViaEmail(target);
+              if (res.success) {
+                Alert.alert(
+                  'New PIN Sent! ✉️',
+                  `A new 4-digit PIN has been generated and sent to ${recoveryEmail}. Please check your inbox.`
+                );
+              } else if (res.newPin) {
+                Alert.alert(
+                  'PIN Reset 🔑',
+                  `Your PIN has been reset to: ${res.newPin}\n\n(Note: Email dispatch server is offline, so your new PIN is displayed here. Please save it.)`
+                );
+              } else {
+                Alert.alert('Error', res.message || 'Failed to reset PIN.');
+              }
+            } catch (e: any) {
+              Alert.alert('Error', e?.message || 'Failed to recover PIN.');
+            } finally {
+              setIsRecovering(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const digits = [
@@ -103,8 +170,10 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({
 
         {errorMsg ? (
           <Text style={[styles.errorText, { color: colors.danger }]}>{errorMsg}</Text>
+        ) : displayHint ? (
+          <Text style={[styles.hintText, { color: colors.textSubtle }]}>{displayHint}</Text>
         ) : (
-          <Text style={[styles.hintText, { color: colors.textSubtle }]}>{hintText}</Text>
+          <View style={styles.hintPlaceholder} />
         )}
 
         {/* Keypad Grid */}
@@ -147,6 +216,20 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({
             </View>
           ))}
         </View>
+
+        {recoveryEmail && recoveryEmail.trim().length > 0 && (
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={handleForgotPin}
+            style={styles.forgotBtn}
+            disabled={isRecovering}
+          >
+            <Ionicons name="help-circle-outline" size={15} color={colors.textMuted} />
+            <Text style={[styles.forgotBtnText, { color: colors.textMuted }]}>
+              {isRecovering ? 'Resetting PIN...' : 'Forgot PIN?'}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
     </AestheticModal>
   );
@@ -178,6 +261,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 16,
   },
+  hintPlaceholder: {
+    height: 16,
+    marginBottom: 16,
+  },
   keypadGrid: {
     width: '100%',
     maxWidth: 260,
@@ -200,6 +287,18 @@ const styles = StyleSheet.create({
   },
   keyText: {
     fontSize: 20,
+    fontWeight: '700',
+  },
+  forgotBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 14,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  forgotBtnText: {
+    fontSize: 13,
     fontWeight: '700',
   },
 });
