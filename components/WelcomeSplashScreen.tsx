@@ -8,9 +8,11 @@ import {
   TouchableOpacity,
   Platform,
   Image,
+  ImageBackground,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { useFinancial } from '@/context/FinancialContext';
+import { TotoroSticker } from '@/components/TotoroStickers';
 
 const { width, height } = Dimensions.get('window');
 
@@ -23,16 +25,15 @@ export const WelcomeSplashScreen: React.FC<WelcomeSplashScreenProps> = ({
   onFinish,
   autoDismissDelay = 0,
 }) => {
-  const { theme } = useFinancial();
-  const isKawaii = theme === 'kawaii';
+  const { colors, theme } = useFinancial();
 
-  // Theme-aware colors
-  const bgColor = isKawaii ? '#FDF9EE' : '#0D0D0F';
-  const textColor = isKawaii ? '#243326' : '#F4F4F5';
-  const cursiveAccentColor = isKawaii ? '#3c7a45' : '#4ade80';
-  const flourishColor = isKawaii ? '#86c28f' : '#22c55e';
-  const subtextColor = isKawaii ? '#788c7b' : '#a1a1aa';
-  const glowColor = isKawaii ? 'rgba(101, 168, 101, 0.15)' : 'rgba(74, 222, 128, 0.18)';
+  // Theme-consistent colors
+  const bgColor = colors.bgPrimary;
+  const textColor = colors.textMain;
+  const cursiveAccentColor = colors.primaryGreen || '#65A865';
+  const flourishColor = colors.primaryAccent || '#F4AAB9';
+  const subtextColor = colors.textMuted || '#637365';
+  const glowColor = 'rgba(101, 168, 101, 0.15)';
 
   // Texts to write
   const fullLine1 = 'welcome to';
@@ -256,6 +257,12 @@ export const WelcomeSplashScreen: React.FC<WelcomeSplashScreenProps> = ({
         },
       ]}
     >
+      <ImageBackground
+        source={require('@/assets/images/grid_paper.png')}
+        resizeMode="repeat"
+        style={StyleSheet.absoluteFill}
+        imageStyle={{ opacity: 0.65 }}
+      />
       <TouchableOpacity
         style={styles.touchArea}
         activeOpacity={1}
@@ -264,7 +271,7 @@ export const WelcomeSplashScreen: React.FC<WelcomeSplashScreenProps> = ({
         {/* Ambient Radial Glow */}
         <View style={[styles.ambientGlow, { backgroundColor: glowColor }]} />
 
-        {/* Floating App Icon / Mascot */}
+        {/* Floating Totoro Mascot Badge */}
         <Animated.View
           style={[
             styles.iconWrapper,
@@ -277,11 +284,18 @@ export const WelcomeSplashScreen: React.FC<WelcomeSplashScreenProps> = ({
             },
           ]}
         >
-          <Image
-            source={require('@/assets/images/icon.png')}
-            style={styles.appIcon}
-            resizeMode="contain"
-          />
+          <View
+            style={[
+              styles.totoroBadgeWrapper,
+              {
+                backgroundColor: colors.bgCard,
+                borderColor: 'transparent',
+                ...colors.cardShadow,
+              },
+            ]}
+          >
+            <TotoroSticker type="app_icon" size={108} />
+          </View>
         </Animated.View>
 
         {/* Center Cursive Calligraphy Section */}
@@ -369,6 +383,11 @@ export const WelcomeSplashScreen: React.FC<WelcomeSplashScreenProps> = ({
           >
             PERSONAL FINANCE &amp; TRACKER
           </Animated.Text>
+
+          {/* Totoro Parade along bottom */}
+          <Animated.View style={{ opacity: tapPromptFadeAnim, marginTop: 22, marginBottom: 4, alignItems: 'center' }}>
+            <TotoroSticker type="parade" height={42} />
+          </Animated.View>
         </View>
 
         {/* Bottom "Tap anywhere to continue" hint */}
@@ -413,16 +432,15 @@ const styles = StyleSheet.create({
   },
   iconWrapper: {
     marginBottom: 20,
-    shadowColor: '#2b5936',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 18,
-    elevation: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  appIcon: {
-    width: 96,
-    height: 96,
-    borderRadius: 24,
+  totoroBadgeWrapper: {
+    borderRadius: 28,
+    borderWidth: 0,
+    padding: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   textContainer: {
     alignItems: 'center',

@@ -8,6 +8,7 @@ import {
   TextInput,
   Alert,
   Platform,
+  ImageBackground,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,11 +17,13 @@ import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useFinancial, Category, SalaryRecord } from '@/context/FinancialContext';
+import { PRESET_OPTIONS, AppTheme, STICKER_PACKS, StickerPack } from '@/constants/theme';
 import { ThemeHeader } from './ThemeHeader';
 import { AestheticModal } from './AestheticModal';
 import { DatePickerFieldModal } from './DatePickerFieldModal';
 import { BaseSalarySetupModal } from './BaseSalarySetupModal';
 import { EmailVerificationModal } from './EmailVerificationModal';
+import { TotoroSticker } from './TotoroStickers';
 
 const CURRENCY_PRESETS = [
   { symbol: 'Rs.', label: 'Rs.' },
@@ -61,6 +64,8 @@ export const AdminDashboardView: React.FC = () => {
   const {
     theme,
     setTheme,
+    stickerPack,
+    setStickerPack,
     colors,
     selectedMonth,
     setSelectedMonth,
@@ -757,19 +762,90 @@ export const AdminDashboardView: React.FC = () => {
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.bgPrimary }]} edges={['top']}>
-      <ThemeHeader
-        title="Admin Control Panel 🛠️"
-        subtitle="Manage database tables & inspect system storage"
-        stickerKey="vault"
-      />
-      <ScrollView
-        style={styles.scrollContainer}
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
+      <ImageBackground
+        source={require('@/assets/images/grid_paper.png')}
+        resizeMode="repeat"
+        style={styles.screenGridBg}
+        imageStyle={{ opacity: 0.65 }}
       >
-        {/* 🎨 App Theme & Style Configuration Card */}
-        <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft }]}>
+        <ThemeHeader
+          title="Admin Control Panel 🛠️"
+          subtitle="Manage database tables & inspect system storage"
+          stickerKey="vault"
+        />
+        <ScrollView
+          style={styles.scrollContainer}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
+          {/* 🧸 Mascot Sticker Pack Card */}
+          <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, borderColor: 'transparent', position: 'relative', overflow: 'visible', marginBottom: 14 }]}>
+            <TotoroSticker type="star" size={32} style={{ position: 'absolute', top: -12, right: 14, zIndex: 10 }} />
+            <View style={styles.sectionHeaderRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.sectionTitle, { color: colors.textMain }]}>Mascot Sticker Pack 🧸</Text>
+                <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 2 }}>
+                  Active Pack: {STICKER_PACKS.find((p) => p.id === stickerPack)?.name || 'Totoro'}
+                </Text>
+              </View>
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+              {STICKER_PACKS.map((pack) => {
+                const isSelected = stickerPack === pack.id;
+                return (
+                  <TouchableOpacity
+                    key={pack.id}
+                    activeOpacity={0.85}
+                    onPress={async () => {
+                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                      await setStickerPack(pack.id);
+                    }}
+                    style={[
+                      styles.themeChoiceCard,
+                      {
+                        flex: 1,
+                        backgroundColor: isSelected ? colors.primaryAccent : colors.bgSecondary,
+                        borderRadius: 16,
+                        borderWidth: 0,
+                        alignItems: 'center',
+                        paddingVertical: 14,
+                        paddingHorizontal: 6,
+                        ...(isSelected ? colors.cardShadow : {}),
+                      },
+                    ]}
+                  >
+                    <TotoroSticker type="big" pack={pack.id} size={42} />
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        fontWeight: '800',
+                        marginTop: 6,
+                        textAlign: 'center',
+                        color: isSelected ? colors.textOnAccent : colors.textMain,
+                      }}
+                      numberOfLines={1}
+                    >
+                      {pack.name.split(' ')[0]}
+                    </Text>
+                    <Text style={{ fontSize: 11, color: isSelected ? colors.textOnAccent : colors.textMuted, marginTop: 2 }}>
+                      {pack.previewEmoji}
+                    </Text>
+                    {isSelected && (
+                      <View style={{ marginTop: 4, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 6, backgroundColor: colors.primaryGreenLight }}>
+                        <Text style={{ fontSize: 9, fontWeight: '900', color: colors.primaryGreen }}>ACTIVE</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
+          {/* 🎨 App Theme & Style Configuration Card */}
+          <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft, position: 'relative', overflow: 'visible' }]}>
+            <TotoroSticker type="leaf" size={44} style={{ position: 'absolute', top: -14, right: 14, zIndex: 10 }} />
           <View style={styles.sectionHeaderRow}>
             <View style={{ flex: 1 }}>
               <View
@@ -810,67 +886,56 @@ export const AdminDashboardView: React.FC = () => {
                     }}
                     numberOfLines={1}
                   >
-                    ACTIVE: {theme === 'kawaii' ? '🌸 KAWAII' : '🕶️ NOIR B&W'}
+                    ACTIVE: {colors.badge?.toUpperCase()}
                   </Text>
                 </View>
               </View>
             </View>
           </View>
 
-          <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
-            {/* Kawaii Option */}
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={async () => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                await setTheme('kawaii');
-              }}
-              style={[
-                styles.themeChoiceCard,
-                {
-                  backgroundColor: colors.bgSecondary,
-                  borderColor: theme === 'kawaii' ? colors.primaryAccent : colors.borderSoft,
-                  borderWidth: theme === 'kawaii' ? 2 : 1,
-                },
-              ]}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Text style={{ fontSize: 24 }}>🌸</Text>
-                {theme === 'kawaii' ? (
-                  <View style={[styles.activePillSmall, { backgroundColor: colors.primaryGreenLight || '#e4f5e4' }]}>
-                    <Text style={[styles.activePillSmallText, { color: colors.primaryGreen }]}>ACTIVE</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 12 }}>
+            {PRESET_OPTIONS.map((opt) => {
+              const isSelected = theme === opt.id || (theme === 'noir' && opt.id === 'midnight');
+              return (
+                <TouchableOpacity
+                  key={opt.id}
+                  activeOpacity={0.8}
+                  onPress={async () => {
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    await setTheme(opt.id);
+                  }}
+                  style={[
+                    styles.themeChoiceCard,
+                    {
+                      width: '48%',
+                      flex: 0,
+                      backgroundColor: colors.bgSecondary,
+                      borderColor: isSelected ? colors.primaryAccent : colors.borderSoft,
+                      borderWidth: 0,
+                      ...(isSelected ? colors.cardShadow : {}),
+                    },
+                  ]}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text style={{ fontSize: 22 }}>{opt.badge.split(' ')[0]}</Text>
+                    {isSelected ? (
+                      <View style={[styles.activePillSmall, { backgroundColor: colors.primaryGreenLight || '#e4f5e4' }]}>
+                        <Text style={[styles.activePillSmallText, { color: colors.primaryGreen }]}>ACTIVE</Text>
+                      </View>
+                    ) : null}
                   </View>
-                ) : null}
-              </View>
-              <Text style={[styles.themeChoiceName, { color: colors.textMain }]}>Pastel</Text>
-            </TouchableOpacity>
-
-            {/* Noir Monochrome Option */}
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={async () => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                await setTheme('noir');
-              }}
-              style={[
-                styles.themeChoiceCard,
-                {
-                  backgroundColor: colors.bgSecondary,
-                  borderColor: theme === 'noir' ? colors.primaryAccent : colors.borderSoft,
-                  borderWidth: theme === 'noir' ? 2 : 1,
-                },
-              ]}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Text style={{ fontSize: 24 }}>🕶️</Text>
-                {theme === 'noir' ? (
-                  <View style={[styles.activePillSmall, { backgroundColor: colors.primaryGreenLight || '#142e1b' }]}>
-                    <Text style={[styles.activePillSmallText, { color: colors.primaryGreen }]}>ACTIVE</Text>
+                  <Text style={[styles.themeChoiceName, { color: colors.textMain }]}>{opt.label}</Text>
+                  <Text style={{ fontSize: 10, color: colors.textMuted, marginTop: 1 }} numberOfLines={1}>
+                    {opt.subtitle}
+                  </Text>
+                  <View style={{ flexDirection: 'row', gap: 4, marginTop: 4 }}>
+                    {opt.dots.map((d, i) => (
+                      <View key={i} style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: d }} />
+                    ))}
                   </View>
-                ) : null}
-              </View>
-              <Text style={[styles.themeChoiceName, { color: colors.textMain }]}>Monochrome</Text>
-            </TouchableOpacity>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
 
@@ -1170,7 +1235,7 @@ export const AdminDashboardView: React.FC = () => {
           </View>
 
           {/* Salary History Over Time */}
-          <View style={{ marginTop: 16, paddingTop: 14, borderTopWidth: 1, borderTopColor: colors.borderSoft }}>
+          <View style={{ marginTop: 16, paddingTop: 14, borderTopWidth: 0 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
               <View>
                 <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textMain }}>
@@ -1213,8 +1278,8 @@ export const AdminDashboardView: React.FC = () => {
                       padding: 10,
                       borderRadius: 12,
                       backgroundColor: colors.bgSecondary,
-                      borderWidth: 1,
-                      borderColor: colors.borderSoft,
+                      borderWidth: 0,
+                      borderColor: 'transparent',
                     }}
                   >
                     <View style={{ flex: 1, minWidth: 0 }}>
@@ -1328,9 +1393,9 @@ export const AdminDashboardView: React.FC = () => {
 
               <TouchableOpacity
                 onPress={() => handleOpenChangePin('account')}
-                style={[styles.changePinBtn, { backgroundColor: colors.primaryGreen }]}
+                style={[styles.changePinBtn, { backgroundColor: colors.primaryAccent }]}
               >
-                <Text style={[styles.changePinBtnText, { color: theme === 'kawaii' ? '#ffffff' : '#121214' }]}>
+                <Text style={[styles.changePinBtnText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}>
                   Change Account PIN
                 </Text>
               </TouchableOpacity>
@@ -1472,10 +1537,8 @@ export const AdminDashboardView: React.FC = () => {
                 backgroundColor: showMonthlyBills
                   ? colors.primaryAccent
                   : colors.bgCard,
-                borderWidth: 1,
-                borderColor: showMonthlyBills
-                  ? colors.primaryAccent
-                  : colors.borderSoft,
+                borderWidth: 0,
+                borderColor: 'transparent',
                 paddingVertical: 10,
                 borderRadius: 12,
               }}
@@ -1537,8 +1600,8 @@ export const AdminDashboardView: React.FC = () => {
                     styles.choiceChip,
                     {
                       backgroundColor: isSelected ? colors.primaryAccent : colors.bgSecondary,
-                      borderColor: isSelected ? colors.borderAccent : colors.borderSoft,
-                      borderWidth: 1,
+                      borderColor: 'transparent',
+                      borderWidth: 0,
                     },
                   ]}
                 >
@@ -1615,10 +1678,10 @@ export const AdminDashboardView: React.FC = () => {
                   paddingHorizontal: 12,
                   paddingVertical: 8,
                   backgroundColor: colors.bgSecondary,
-                  borderRadius: 12,
+                  borderRadius: 14,
                   marginBottom: 10,
-                  borderWidth: 1,
-                  borderColor: colors.borderSoft,
+                  borderWidth: 0,
+                  borderColor: 'transparent',
                   gap: 8,
                 }}
               >
@@ -1642,8 +1705,8 @@ export const AdminDashboardView: React.FC = () => {
                     paddingVertical: 5,
                     borderRadius: 14,
                     backgroundColor: showMonthlyBills ? colors.bgCard : colors.primaryAccent,
-                    borderWidth: 1,
-                    borderColor: showMonthlyBills ? colors.borderSoft : colors.primaryAccent,
+                    borderWidth: 0,
+                    borderColor: 'transparent',
                   }}
                 >
                   <Text
@@ -2334,7 +2397,7 @@ export const AdminDashboardView: React.FC = () => {
                 />
                 <TouchableOpacity
                   onPress={() => setIsAdminDatePickerOpen(true)}
-                  style={{ padding: 12, borderRadius: 14, backgroundColor: colors.bgSecondary, borderWidth: 1, borderColor: colors.borderSoft }}
+                  style={{ padding: 12, borderRadius: 14, backgroundColor: colors.bgSecondary, borderWidth: 0, borderColor: 'transparent' }}
                 >
                   <Ionicons name="calendar-outline" size={20} color={colors.primaryAccent} />
                 </TouchableOpacity>
@@ -2398,15 +2461,15 @@ export const AdminDashboardView: React.FC = () => {
                   Alert.alert('Share Failed', e?.message || 'Could not trigger share dialog.');
                 }
               }}
-              style={[styles.submitButton, { backgroundColor: colors.primaryGreen, marginBottom: 10 }]}
+              style={[styles.submitButton, { backgroundColor: colors.primaryAccent, marginBottom: 10 }]}
             >
-              <Text style={[styles.submitButtonText, { color: '#ffffff' }]}>Share / Save Backup File</Text>
+              <Text style={[styles.submitButtonText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}>Share / Save Backup File</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               activeOpacity={0.8}
               onPress={() => setIsExportSuccessModalOpen(false)}
-              style={[styles.submitButton, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft, borderWidth: 1 }]}
+              style={[styles.submitButton, { backgroundColor: colors.bgSecondary, borderColor: 'transparent', borderWidth: 0 }]}
             >
               <Text style={[styles.submitButtonText, { color: colors.textMain }]}>Done</Text>
             </TouchableOpacity>
@@ -2440,10 +2503,10 @@ export const AdminDashboardView: React.FC = () => {
                 gap: 8,
                 paddingVertical: 12,
                 paddingHorizontal: 16,
-                borderRadius: 14,
+                borderRadius: 16,
                 backgroundColor: colors.primaryAccentLight || '#fff4e6',
-                borderWidth: 1.5,
-                borderColor: colors.primaryAccent,
+                borderWidth: 0,
+                borderColor: 'transparent',
                 marginBottom: 12,
               }}
             >
@@ -2454,15 +2517,15 @@ export const AdminDashboardView: React.FC = () => {
             </TouchableOpacity>
 
             {importStatusMessage && (
-              <View style={{ backgroundColor: colors.primaryGreenLight || '#eaf4eb', padding: 10, borderRadius: 12, marginBottom: 12, borderWidth: 1, borderColor: colors.primaryGreen }}>
+              <View style={{ backgroundColor: colors.primaryGreenLight || '#eaf4eb', padding: 10, borderRadius: 12, marginBottom: 12, borderWidth: 0, borderColor: 'transparent' }}>
                 <Text style={{ fontSize: 12, fontWeight: '700', color: colors.primaryGreen }}>
                   ✅ {importStatusMessage}
                 </Text>
               </View>
             )}
 
-            <View style={{ backgroundColor: '#fff3cd', padding: 10, borderRadius: 12, marginBottom: 14, borderWidth: 1, borderColor: '#ffe69c' }}>
-              <Text style={{ fontSize: 11, color: '#664d03', lineHeight: 15 }}>
+            <View style={{ backgroundColor: colors.warningLight, padding: 10, borderRadius: 12, marginBottom: 14, borderWidth: 0, borderColor: 'transparent' }}>
+              <Text style={{ fontSize: 11, color: colors.warning, lineHeight: 15, fontWeight: '600' }}>
                 ⚠️ Restoring will overwrite existing records with the data from this backup.
               </Text>
             </View>
@@ -2573,8 +2636,8 @@ export const AdminDashboardView: React.FC = () => {
                             alignItems: 'center',
                             justifyContent: 'center',
                             backgroundColor: colors.bgSecondary,
-                            borderColor: colors.borderSoft,
-                            borderWidth: 1,
+                            borderColor: 'transparent',
+                            borderWidth: 0,
                           }}
                         >
                           <Ionicons name="backspace-outline" size={22} color={colors.textMain} />
@@ -2599,8 +2662,8 @@ export const AdminDashboardView: React.FC = () => {
                           alignItems: 'center',
                           justifyContent: 'center',
                           backgroundColor: colors.bgSecondary,
-                          borderColor: colors.borderSoft,
-                          borderWidth: 1,
+                          borderColor: 'transparent',
+                          borderWidth: 0,
                         }}
                       >
                         <Text style={{ fontSize: 20, fontWeight: '800', color: colors.textMain }}>{item}</Text>
@@ -2705,9 +2768,9 @@ export const AdminDashboardView: React.FC = () => {
                 await setCashInHandInitialMoney(val);
                 setIsInitialCashAdminModalOpen(false);
               }}
-              style={[styles.submitButton, { backgroundColor: colors.primaryGreen }]}
+              style={[styles.submitButton, { backgroundColor: colors.primaryAccent }]}
             >
-              <Text style={[styles.submitButtonText, { color: '#ffffff' }]}>Save Initial Money 💵</Text>
+              <Text style={[styles.submitButtonText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}>Save Initial Money 💵</Text>
             </TouchableOpacity>
           </View>
         </AestheticModal>
@@ -2725,14 +2788,24 @@ export const AdminDashboardView: React.FC = () => {
             Alert.alert('Email Updated 🎉', 'Your recovery email has been successfully updated and verified.');
           }}
         />
+        {/* Totoro Parade Footer in Admin Dashboard */}
+        <View style={{ alignItems: 'center', marginTop: 18, marginBottom: 8 }}>
+          <TotoroSticker type="parade" height={44} />
+        </View>
       </ScrollView>
-    </SafeAreaView>
-  );
+    </ImageBackground>
+  </SafeAreaView>
+);
 };
 
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
+  },
+  screenGridBg: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
   },
   scrollContainer: {
     flex: 1,
@@ -2744,8 +2817,8 @@ const styles = StyleSheet.create({
   },
   adminBanner: {
     padding: 16,
-    borderRadius: 20,
-    borderWidth: 1.5,
+    borderRadius: 22,
+    borderWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -2776,9 +2849,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   sectionCard: {
-    padding: 16,
-    borderRadius: 20,
-    borderWidth: 1,
+    padding: 18,
+    borderRadius: 22,
+    borderWidth: 0,
   },
   sectionHeader: {
     marginBottom: 14,
@@ -2828,9 +2901,9 @@ const styles = StyleSheet.create({
   statBox: {
     flex: 1,
     minWidth: '45%',
-    padding: 12,
-    borderRadius: 14,
-    borderWidth: 1,
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 0,
     alignItems: 'center',
   },
   statNumber: {
@@ -2847,8 +2920,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 12,
-    borderRadius: 14,
-    borderWidth: 1.5,
+    borderRadius: 16,
+    borderWidth: 0,
     gap: 8,
   },
   inspectDbBtnText: {
@@ -2891,8 +2964,8 @@ const styles = StyleSheet.create({
   },
   input: {
     height: 44,
-    borderRadius: 12,
-    borderWidth: 1,
+    borderRadius: 14,
+    borderWidth: 0,
     paddingHorizontal: 12,
     fontSize: 14,
   },
@@ -2943,9 +3016,9 @@ const styles = StyleSheet.create({
   },
   salaryAdminStat: {
     flex: 1,
-    padding: 12,
-    borderRadius: 14,
-    borderWidth: 1,
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 0,
   },
   salaryAdminStatLabel: {
     fontSize: 11,
@@ -2963,9 +3036,9 @@ const styles = StyleSheet.create({
   },
   pinBox: {
     flex: 1,
-    padding: 12,
-    borderRadius: 16,
-    borderWidth: 1,
+    padding: 14,
+    borderRadius: 18,
+    borderWidth: 0,
   },
   pinBoxHeader: {
     flexDirection: 'row',
@@ -3013,9 +3086,9 @@ const styles = StyleSheet.create({
   },
   recoveryEmailBox: {
     marginTop: 12,
-    padding: 12,
-    borderRadius: 14,
-    borderWidth: 1,
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 0,
   },
   recoveryEmailHeader: {
     flexDirection: 'row',
@@ -3031,7 +3104,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 8,
-    borderWidth: 1,
+    borderWidth: 0,
   },
   recoveryStatusText: {
     fontSize: 10,
@@ -3070,9 +3143,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 12,
-    borderRadius: 14,
-    borderWidth: 1,
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 0,
     marginTop: 12,
   },
   salaryBankLabel: {
@@ -3098,7 +3171,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 14,
     borderRadius: 16,
-    borderWidth: 1,
+    borderWidth: 0,
   },
   accountSelectName: {
     fontSize: 15,
@@ -3118,8 +3191,8 @@ const styles = StyleSheet.create({
   currencyAdminChip: {
     paddingHorizontal: 16,
     paddingVertical: 9,
-    borderRadius: 12,
-    borderWidth: 1,
+    borderRadius: 14,
+    borderWidth: 0,
   },
   currencyAdminChipText: {
     fontSize: 13,
@@ -3134,8 +3207,8 @@ const styles = StyleSheet.create({
   customAdminCurrencyInput: {
     flex: 1,
     height: 44,
-    borderWidth: 1,
-    borderRadius: 12,
+    borderWidth: 0,
+    borderRadius: 14,
     paddingHorizontal: 14,
     fontSize: 14,
     fontWeight: '700',

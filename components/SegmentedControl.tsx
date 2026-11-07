@@ -22,7 +22,7 @@ export function SegmentedControl<T extends string>({
   onSelect,
   isScrollable = false,
 }: SegmentedControlProps<T>) {
-  const { colors, theme } = useFinancial();
+  const { colors } = useFinancial();
 
   const handlePress = (key: T) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -33,7 +33,7 @@ export function SegmentedControl<T extends string>({
     <View
       style={[
         styles.container,
-        { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft },
+        { backgroundColor: colors.bgSecondary },
       ]}
     >
       {options.map((opt) => {
@@ -47,8 +47,6 @@ export function SegmentedControl<T extends string>({
               styles.segmentBtn,
               isActive && {
                 backgroundColor: colors.bgCard,
-                borderColor: colors.borderAccent || colors.primaryAccent,
-                borderWidth: 1,
                 ...colors.cardShadow,
               },
             ]}
@@ -69,7 +67,7 @@ export function SegmentedControl<T extends string>({
                   {
                     backgroundColor: isActive
                       ? colors.primaryAccent
-                      : colors.borderSoft,
+                      : colors.bgCard,
                   },
                 ]}
               >
@@ -77,9 +75,7 @@ export function SegmentedControl<T extends string>({
                   style={[
                     styles.badgeText,
                     {
-                      color: isActive
-                        ? colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214')
-                        : colors.textMuted,
+                      color: isActive ? colors.textOnAccent : colors.textMain,
                     },
                   ]}
                 >
@@ -110,17 +106,22 @@ export function SegmentedControl<T extends string>({
 
 const styles = StyleSheet.create({
   scrollContainer: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingVertical: 6,
   },
   container: {
     flexDirection: 'row',
     borderRadius: 16,
     padding: 4,
-    borderWidth: 1,
-    marginHorizontal: 20,
-    marginVertical: 8,
+    borderWidth: 0,
+    marginHorizontal: 16,
+    marginVertical: 6,
     gap: 4,
+    shadowColor: '#28452D',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
   },
   segmentBtn: {
     flex: 1,
@@ -133,19 +134,20 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   segmentText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
   },
   segmentTextActive: {
     fontWeight: '800',
   },
   badgeWrapper: {
-    paddingHorizontal: 6,
+    paddingHorizontal: 7,
     paddingVertical: 2,
-    borderRadius: 10,
+    borderRadius: 8,
+    borderWidth: 0,
   },
   badgeText: {
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 10,
+    fontWeight: '800',
   },
 });

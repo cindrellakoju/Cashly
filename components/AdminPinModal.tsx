@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { AestheticModal } from './AestheticModal';
 import { useFinancial } from '@/context/FinancialContext';
+import { TotoroSticker } from './TotoroStickers';
 
 interface AdminPinModalProps {
   visible: boolean;
@@ -149,6 +150,11 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({
       icon={icon}
     >
       <View style={styles.container}>
+        {/* Totoro Security Mascot */}
+        <View style={{ alignItems: 'center', marginBottom: 12 }}>
+          <TotoroSticker type={isAccount ? 'vault' : 'peek'} size={58} />
+        </View>
+
         {/* 4 PIN Dots */}
         <View style={styles.dotsRow}>
           {[0, 1, 2, 3].map((index) => {
@@ -192,7 +198,7 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({
                       onPress={handleBackspace}
                       style={[
                         styles.keyButton,
-                        { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft, borderWidth: 1 },
+                        { backgroundColor: colors.bgSecondary, borderColor: 'transparent', borderWidth: 0 },
                       ]}
                     >
                       <Ionicons name="backspace-outline" size={22} color={colors.textMain} />
@@ -206,7 +212,7 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({
                     onPress={() => handleDigitPress(item)}
                     style={[
                       styles.keyButton,
-                      { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft, borderWidth: 1 },
+                      { backgroundColor: colors.bgSecondary, borderColor: 'transparent', borderWidth: 0 },
                     ]}
                   >
                     <Text style={[styles.keyText, { color: colors.textMain }]}>{item}</Text>

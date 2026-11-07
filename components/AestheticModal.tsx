@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  ImageBackground,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFinancial } from '@/context/FinancialContext';
@@ -43,7 +44,7 @@ export const AestheticModal: React.FC<AestheticModalProps> = ({
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardAvoidingView}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        keyboardVerticalOffset={0}
       >
         <View style={styles.backdrop}>
           {/* Backdrop touch target to dismiss modal on tap outside */}
@@ -61,38 +62,45 @@ export const AestheticModal: React.FC<AestheticModalProps> = ({
               },
             ]}
           >
-            {/* Header */}
-            <View style={styles.headerRow}>
-              <View style={styles.titleColumn}>
-                <Text style={[styles.modalTitle, { color: colors.textMain }]}>
-                  {title} {icon ? icon : ''}
-                </Text>
-                {subtitle ? (
-                  <Text style={[styles.modalSubtitle, { color: colors.textMuted }]}>
-                    {subtitle}
-                  </Text>
-                ) : null}
-              </View>
-              <TouchableOpacity
-                onPress={onClose}
-                activeOpacity={0.7}
-                style={[styles.closeBtn, { backgroundColor: colors.bgSecondary }]}
-              >
-                <Ionicons name="close" size={20} color={colors.textMain} />
-              </TouchableOpacity>
-            </View>
-
-            {/* Scrollable Content */}
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-              keyboardDismissMode="on-drag"
-              contentContainerStyle={styles.scrollContent}
-              style={styles.scrollView}
-              bounces={false}
+            <ImageBackground
+              source={require('@/assets/images/grid_paper.png')}
+              resizeMode="repeat"
+              style={styles.gridOverlay}
+              imageStyle={{ opacity: 0.55 }}
             >
-              {children}
-            </ScrollView>
+              {/* Header */}
+              <View style={[styles.headerRow, { borderBottomColor: colors.borderSoft }]}>
+                <View style={styles.titleColumn}>
+                  <Text style={[styles.modalTitle, { color: colors.textMain }]}>
+                    {title} {icon ? icon : ''}
+                  </Text>
+                  {subtitle ? (
+                    <Text style={[styles.modalSubtitle, { color: colors.textMuted }]}>
+                      {subtitle}
+                    </Text>
+                  ) : null}
+                </View>
+                <TouchableOpacity
+                  onPress={onClose}
+                  activeOpacity={0.7}
+                  style={[styles.closeBtn, { backgroundColor: colors.bgCardAlt, borderColor: colors.borderSoft }]}
+                >
+                  <Ionicons name="close" size={17} color={colors.textMain} />
+                </TouchableOpacity>
+              </View>
+
+              {/* Scrollable Content */}
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="on-drag"
+                contentContainerStyle={styles.scrollContent}
+                style={styles.scrollView}
+                bounces={false}
+              >
+                {children}
+              </ScrollView>
+            </ImageBackground>
           </View>
         </View>
       </KeyboardAvoidingView>
@@ -106,7 +114,7 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    backgroundColor: 'rgba(44, 34, 29, 0.55)',
     justifyContent: 'flex-end',
   },
   backdropDismissArea: {
@@ -117,29 +125,37 @@ const styles = StyleSheet.create({
     maxHeight: '92%',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    borderWidth: 1,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: Platform.OS === 'ios' ? 32 : 24,
+    borderWidth: 0,
+    borderBottomWidth: 0,
+    overflow: 'hidden',
+  },
+  gridOverlay: {
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: Platform.OS === 'ios' ? 28 : 20,
   },
   scrollView: {
     flexShrink: 1,
+  },
+  scrollContent: {
+    paddingBottom: 8,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: 14,
     paddingBottom: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(150, 150, 150, 0.2)',
+    borderBottomWidth: 0,
   },
   titleColumn: {
     flex: 1,
+    marginRight: 8,
   },
   modalTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '800',
+    letterSpacing: -0.2,
   },
   modalSubtitle: {
     fontSize: 12,
@@ -150,10 +166,8 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
+    borderWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  scrollContent: {
-    paddingBottom: 28,
   },
 });

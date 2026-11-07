@@ -1,6 +1,6 @@
 import * as SQLite from 'expo-sqlite';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { AppTheme } from '@/constants/theme';
+import { AppTheme, StickerPack } from '@/constants/theme';
 import {
   CashEnvelope,
   Category,
@@ -133,6 +133,7 @@ export async function markOnboardingCompleted(): Promise<void> {
 
 export interface AppStateData {
   theme: AppTheme;
+  stickerPack?: StickerPack;
   currencySymbol: string;
   salary: number;
   hasBaseSalary?: boolean | null;
@@ -564,7 +565,11 @@ export async function loadAllData(defaultData: AppStateData): Promise<AppStateDa
   const settingsMap = new Map(settingsRows.map((r) => [r.key, r.value]));
 
   const rawTheme = settingsMap.get('theme') as AppTheme;
-  const theme: AppTheme = (rawTheme === 'noir' || rawTheme === 'kawaii') ? rawTheme : (defaultData.theme || 'kawaii');
+  const validThemes: AppTheme[] = ['paper', 'paperDark', 'kawaii', 'dreamy', 'fresh', 'playful', 'midnight', 'noir'];
+  const theme: AppTheme = (rawTheme === 'noir' || rawTheme === 'paperDark') ? 'paperDark' : (validThemes.includes(rawTheme) ? rawTheme : 'kawaii');
+  const rawStickerPack = settingsMap.get('sticker_pack');
+  const validPacks: StickerPack[] = ['totoro', 'spy_family', 'cat'];
+  const stickerPack: StickerPack = validPacks.includes(rawStickerPack as any) ? (rawStickerPack as StickerPack) : 'totoro';
   const currencySymbol = (settingsMap.get('currencySymbol') || defaultData.currencySymbol || 'Rs.').trim();
   const salary = settingsMap.has('salary') ? Number(settingsMap.get('salary')) : defaultData.salary;
   const hasBaseSalaryRaw = settingsMap.get('has_base_salary');
@@ -810,6 +815,7 @@ export async function loadAllData(defaultData: AppStateData): Promise<AppStateDa
 
   return {
     theme,
+    stickerPack,
     currencySymbol,
     salary,
     hasBaseSalary,

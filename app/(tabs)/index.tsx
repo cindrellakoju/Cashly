@@ -9,6 +9,7 @@ import {
   Dimensions,
   Platform,
   Alert,
+  ImageBackground,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -16,12 +17,14 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useFinancial, extractDayFromDate, getCurrentMonthKey } from '@/context/FinancialContext';
 import { ThemeHeader } from '@/components/ThemeHeader';
+import { TotoroSticker } from '@/components/TotoroStickers';
 import { SegmentedControl } from '@/components/SegmentedControl';
 import { AestheticModal } from '@/components/AestheticModal';
 import { AdminDashboardView as _AdminDashboardView } from '@/components/AdminDashboardView'; // kept for type safety, rendered in _layout
 import { DatePickerFieldModal } from '@/components/DatePickerFieldModal';
 import { BaseSalarySetupModal } from '@/components/BaseSalarySetupModal';
 import { EmailVerificationModal } from '@/components/EmailVerificationModal';
+
 
 type HomeSegment = 'dashboard' | 'calendar' | 'analytics';
 
@@ -194,6 +197,7 @@ export default function HomeScreen() {
   // When database is wiped or onboarding is reset, ensure we always return to Step 1 ('email')
   useEffect(() => {
     if (!hasCompletedOnboarding && !recoveryEmail) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setOnboardingStage('email');
     }
   }, [hasCompletedOnboarding, recoveryEmail]);
@@ -617,6 +621,12 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.bgPrimary }]} edges={['top']}>
+      <ImageBackground
+        source={require('@/assets/images/grid_paper.png')}
+        resizeMode="repeat"
+        style={styles.screenGridBg}
+        imageStyle={{ opacity: 0.65 }}
+      >
       {/* Header */}
       <ThemeHeader
         title={
@@ -700,7 +710,7 @@ export default function HomeScreen() {
           {activeSegment === 'dashboard' && (
             <View style={styles.viewContainer}>
               {/* Month Navigator Header Bar */}
-              {/* <View style={[styles.dashboardMonthBar, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft, borderWidth: 1, ...colors.cardShadow }]}>
+              {/* <View style={[styles.dashboardMonthBar, { backgroundColor: colors.bgCard, ...colors.cardShadow }]}>
                   <TouchableOpacity
                     onPress={handlePrevCalMonth}
                     style={styles.monthNavBtn}
@@ -747,6 +757,64 @@ export default function HomeScreen() {
                   </View>
                 </View> */}
 
+                            {/* Hero Totoro-ly Important Notes Banner */}
+              <View
+                style={[
+                  styles.totoroHeroCard,
+                  {
+                    backgroundColor: colors.bgCard,
+                    borderColor: colors.borderSoft,
+                    ...colors.cardShadow,
+                  },
+                ]}
+              >
+                <View style={styles.totoroHeroTopRow}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <TotoroSticker type="star" size={28} />
+                    <Text style={[styles.totoroHeroTitle, { color: colors.textMain }]}>
+                      Totoro-ly Important Budget
+                    </Text>
+                  </View>
+                  <TotoroSticker type="peek" size={66} style={styles.heroPeekSticker} />
+                </View>
+
+                <View style={styles.totoroHeroContent}>
+                  <Text style={[styles.totoroHeroSub, { color: colors.textMuted }]}>
+                    {selectedMonth === 'ALL' ? 'Lifetime Available Surplus' : currentMonthName + ' Available Surplus'}
+                  </Text>
+                  <View style={styles.totoroHeroAmountRow}>
+                    <Text
+                      style={[
+                        styles.totoroHeroAmount,
+                        { color: remainingBudget >= 0 ? colors.textMain : colors.danger },
+                      ]}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                    >
+                      {currencySymbol} {remainingBudget.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                    </Text>
+                    <View
+                      style={[
+                        styles.totoroHeroBadge,
+                        {
+                          backgroundColor: remainingBudget >= 0 ? colors.primaryGreenLight : colors.dangerLight,
+                          borderColor: remainingBudget >= 0 ? colors.primaryGreen : colors.danger,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.totoroHeroBadgeText,
+                          { color: remainingBudget >= 0 ? colors.primaryGreen : colors.danger },
+                        ]}
+                      >
+                        {remainingBudget >= 0 ? '✓ On Track' : '⚠️ Over Budget'}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
+
               {/* 4 Summary Cards */}
               <View style={styles.metricsGrid}>
                 {hasBaseSalary ? (
@@ -761,43 +829,33 @@ export default function HomeScreen() {
                         styles.metricCard,
                         {
                           backgroundColor: colors.bgCard,
-                          borderColor: isSalaryLoaded ? colors.primaryGreenLight : colors.borderSoft,
-                          borderWidth: 1,
+                          borderColor: colors.borderSoft,
                           ...colors.cardShadow,
                         },
                       ]}
                     >
+                      <TotoroSticker type="big" size={64} style={styles.cardCornerSticker} />
                       <View style={styles.metricHeaderRow}>
-                        <Text style={styles.metricEmoji}>👛</Text>
+                        <View style={[styles.paperIconBadge, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
+                          <Ionicons name="wallet-outline" size={15} color={colors.textMain} />
+                        </View>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                           {isSalaryLoaded ? (
-                            <Text
-                              style={[
-                                styles.badgePill,
-                                { backgroundColor: colors.primaryGreenLight, color: colors.primaryGreen, fontWeight: '800' },
-                              ]}
-                            >
-                              ✅ Loaded
-                            </Text>
+                            <View style={[styles.badgePill, { backgroundColor: colors.primaryGreenLight, borderColor: colors.primaryGreenLight }]}>
+                              <Text style={[styles.badgePillText, { color: colors.primaryGreen }]}>Loaded</Text>
+                            </View>
                           ) : (
-                            <Text
-                              style={[
-                                styles.badgePill,
-                                {
-                                  backgroundColor: '#fff3cd',
-                                  color: '#997404',
-                                  fontWeight: '800',
-                                },
-                              ]}
-                            >
-                              {daysUntilPayday === 1 ? '⏳ Tomorrow' : `⏳ In ${daysUntilPayday}d`}
-                            </Text>
+                            <View style={[styles.badgePill, { backgroundColor: colors.warningLight, borderColor: colors.warningLight }]}>
+                              <Text style={[styles.badgePillText, { color: colors.warning }]}>
+                                {daysUntilPayday === 1 ? 'Tomorrow' : 'In ' + daysUntilPayday + 'd'}
+                              </Text>
+                            </View>
                           )}
-                          <Ionicons name="pencil" size={12} color={colors.textSubtle} />
+                          <Ionicons name="pencil" size={11} color={colors.textSubtle} />
                         </View>
                       </View>
                       <Text style={[styles.metricLabel, { color: colors.textMuted }]}>
-                        {selectedMonth === 'ALL' ? 'Salary (All Time)' : 'Base Salary'}
+                        {selectedMonth === 'ALL' ? 'Base Salary' : 'Base Salary'}
                       </Text>
                       <Text style={[styles.metricValue, { color: colors.textMain }]} numberOfLines={1} adjustsFontSizeToFit>
                         {currencySymbol} {activeMonthSalary.toLocaleString()}
@@ -805,25 +863,39 @@ export default function HomeScreen() {
                       <Text
                         style={{
                           fontSize: 10,
-                          fontWeight: '700',
+                          fontWeight: '500',
                           marginTop: 3,
-                          color: isSalaryLoaded || selectedMonth === 'ALL' ? colors.primaryGreen : colors.textMuted,
+                          color: isSalaryLoaded || selectedMonth === 'ALL' ? colors.primaryGreen : colors.textSubtle,
                         }}
                         numberOfLines={1}
                       >
                         {selectedMonth === 'ALL'
-                          ? 'Across all months 💼'
+                          ? 'Across all months'
                           : isSalaryLoaded
-                            ? `✓ In ${accounts.find((a) => a.id === salaryAccountId)?.name || 'Cash in Hand'}`
-                            : `Due on ${baseSalaryDate}th`}
+                            ? ('In ' + (accounts.find((a) => a.id === salaryAccountId)?.name || 'Cash in Hand'))
+                            : ('Due on ' + baseSalaryDate + 'th')}
                       </Text>
                     </TouchableOpacity>
 
                     {/* Card 2: Spent */}
-                    <View style={[styles.metricCard, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft, borderWidth: 1, ...colors.cardShadow }]}>
+                    <View
+                      style={[
+                        styles.metricCard,
+                        {
+                          backgroundColor: colors.bgCard,
+                          borderColor: colors.borderSoft,
+                          ...colors.cardShadow,
+                        },
+                      ]}
+                    >
+                      <TotoroSticker type="spent" size={62} style={styles.cardCornerSticker} />
                       <View style={styles.metricHeaderRow}>
-                        <Text style={styles.metricEmoji}>💸</Text>
-                        <Text style={[styles.badgePill, { backgroundColor: colors.dangerLight, color: colors.danger }]}>Spent</Text>
+                        <View style={[styles.paperIconBadge, { backgroundColor: colors.dangerLight, borderColor: colors.dangerLight }]}>
+                          <Ionicons name="arrow-up-circle-outline" size={15} color={colors.danger} />
+                        </View>
+                        <View style={[styles.badgePill, { backgroundColor: colors.dangerLight, borderColor: colors.dangerLight }]}>
+                          <Text style={[styles.badgePillText, { color: colors.danger }]}>Spent</Text>
+                        </View>
                       </View>
                       <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Total Spent</Text>
                       <Text style={[styles.metricValue, { color: colors.danger }]} numberOfLines={1} adjustsFontSizeToFit>
@@ -840,13 +912,25 @@ export default function HomeScreen() {
                         setIncNote('');
                         setIsIncomeModalOpen(true);
                       }}
-                      style={[styles.metricCard, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft, borderWidth: 1, ...colors.cardShadow }]}
+                      style={[
+                        styles.metricCard,
+                        {
+                          backgroundColor: colors.bgCard,
+                          borderColor: colors.borderSoft,
+                          ...colors.cardShadow,
+                        },
+                      ]}
                     >
+                      <TotoroSticker type="leaf" size={62} style={styles.cardCornerSticker} />
                       <View style={styles.metricHeaderRow}>
-                        <Text style={styles.metricEmoji}>📈</Text>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                          <Text style={[styles.badgePill, { backgroundColor: colors.primaryGreenLight, color: colors.primaryGreen }]}>Inflow</Text>
-                          <Ionicons name="add-circle" size={13} color={colors.primaryGreen} />
+                        <View style={[styles.paperIconBadge, { backgroundColor: colors.primaryGreenLight, borderColor: colors.primaryGreenLight }]}>
+                          <Ionicons name="arrow-down-circle-outline" size={15} color={colors.primaryGreen} />
+                        </View>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                          <View style={[styles.badgePill, { backgroundColor: colors.primaryGreenLight, borderColor: colors.primaryGreenLight }]}>
+                            <Text style={[styles.badgePillText, { color: colors.primaryGreen }]}>Inflow</Text>
+                          </View>
+                          <Ionicons name="add" size={13} color={colors.primaryGreen} />
                         </View>
                       </View>
                       <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Total Income</Text>
@@ -856,10 +940,24 @@ export default function HomeScreen() {
                     </TouchableOpacity>
 
                     {/* Card 4: Remaining */}
-                    <View style={[styles.metricCard, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft, borderWidth: 1, ...colors.cardShadow }]}>
+                    <View
+                      style={[
+                        styles.metricCard,
+                        {
+                          backgroundColor: colors.bgCard,
+                          borderColor: colors.borderSoft,
+                          ...colors.cardShadow,
+                        },
+                      ]}
+                    >
+                      <TotoroSticker type="savings" size={62} style={styles.cardCornerSticker} />
                       <View style={styles.metricHeaderRow}>
-                        <Text style={styles.metricEmoji}>✨</Text>
-                        <Text style={[styles.badgePill, { backgroundColor: colors.primaryAccentLight, color: colors.activeTabTint }]}>Saved</Text>
+                        <View style={[styles.paperIconBadge, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
+                          <Ionicons name="pie-chart-outline" size={15} color={colors.textMain} />
+                        </View>
+                        <View style={[styles.badgePill, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
+                          <Text style={[styles.badgePillText, { color: colors.textMain }]}>Balance</Text>
+                        </View>
                       </View>
                       <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Remaining</Text>
                       <Text style={[styles.metricValue, { color: remainingBudget >= 0 ? colors.textMain : colors.danger }]} numberOfLines={1} adjustsFontSizeToFit>
@@ -869,7 +967,7 @@ export default function HomeScreen() {
                   </>
                 ) : (
                   <>
-                    {/* Card 1: Total Income (No Base Salary field shown) */}
+                    {/* Card 1: Total Income */}
                     <TouchableOpacity
                       activeOpacity={0.8}
                       onPress={() => {
@@ -878,13 +976,25 @@ export default function HomeScreen() {
                         setIncNote('');
                         setIsIncomeModalOpen(true);
                       }}
-                      style={[styles.metricCard, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft, borderWidth: 1, ...colors.cardShadow }]}
+                      style={[
+                        styles.metricCard,
+                        {
+                          backgroundColor: colors.bgCard,
+                          borderColor: colors.borderSoft,
+                          ...colors.cardShadow,
+                        },
+                      ]}
                     >
+                      <TotoroSticker type="leaf" size={62} style={styles.cardCornerSticker} />
                       <View style={styles.metricHeaderRow}>
-                        <Text style={styles.metricEmoji}>💰</Text>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                          <Text style={[styles.badgePill, { backgroundColor: colors.primaryGreenLight, color: colors.primaryGreen }]}>Inflow</Text>
-                          <Ionicons name="add-circle" size={13} color={colors.primaryGreen} />
+                        <View style={[styles.paperIconBadge, { backgroundColor: colors.primaryGreenLight, borderColor: colors.primaryGreenLight }]}>
+                          <Ionicons name="arrow-down-circle-outline" size={15} color={colors.primaryGreen} />
+                        </View>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                          <View style={[styles.badgePill, { backgroundColor: colors.primaryGreenLight, borderColor: colors.primaryGreenLight }]}>
+                            <Text style={[styles.badgePillText, { color: colors.primaryGreen }]}>Inflow</Text>
+                          </View>
+                          <Ionicons name="add" size={13} color={colors.primaryGreen} />
                         </View>
                       </View>
                       <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Total Income</Text>
@@ -894,10 +1004,24 @@ export default function HomeScreen() {
                     </TouchableOpacity>
 
                     {/* Card 2: Spent */}
-                    <View style={[styles.metricCard, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft, borderWidth: 1, ...colors.cardShadow }]}>
+                    <View
+                      style={[
+                        styles.metricCard,
+                        {
+                          backgroundColor: colors.bgCard,
+                          borderColor: colors.borderSoft,
+                          ...colors.cardShadow,
+                        },
+                      ]}
+                    >
+                      <TotoroSticker type="spent" size={62} style={styles.cardCornerSticker} />
                       <View style={styles.metricHeaderRow}>
-                        <Text style={styles.metricEmoji}>💸</Text>
-                        <Text style={[styles.badgePill, { backgroundColor: colors.dangerLight, color: colors.danger }]}>Spent</Text>
+                        <View style={[styles.paperIconBadge, { backgroundColor: colors.dangerLight, borderColor: colors.dangerLight }]}>
+                          <Ionicons name="arrow-up-circle-outline" size={15} color={colors.danger} />
+                        </View>
+                        <View style={[styles.badgePill, { backgroundColor: colors.dangerLight, borderColor: colors.dangerLight }]}>
+                          <Text style={[styles.badgePillText, { color: colors.danger }]}>Spent</Text>
+                        </View>
                       </View>
                       <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Total Spent</Text>
                       <Text style={[styles.metricValue, { color: colors.danger }]} numberOfLines={1} adjustsFontSizeToFit>
@@ -905,37 +1029,65 @@ export default function HomeScreen() {
                       </Text>
                     </View>
 
-                    {/* Card 3: Remaining (Full Width Hero Card - exactly 3 fields!) */}
+                    {/* Card 3: Remaining */}
                     <View
                       style={[
                         styles.metricCard,
                         {
-                          width: '100%',
                           backgroundColor: colors.bgCard,
                           borderColor: colors.borderSoft,
-                          borderWidth: 1,
                           ...colors.cardShadow,
                         },
                       ]}
                     >
+                      <TotoroSticker type="big" size={64} style={styles.cardCornerSticker} />
                       <View style={styles.metricHeaderRow}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                          <Text style={[styles.metricLabel, { color: colors.textMuted, marginBottom: 0 }]}>Monthly Balance</Text>
+                        <View style={[styles.paperIconBadge, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
+                          <Ionicons name="pie-chart-outline" size={15} color={colors.textMain} />
                         </View>
-                        <Text
+                        <View
                           style={[
                             styles.badgePill,
                             {
                               backgroundColor: remainingBudget >= 0 ? colors.primaryGreenLight : colors.dangerLight,
-                              color: remainingBudget >= 0 ? colors.primaryGreen : colors.danger,
+                              borderColor: remainingBudget >= 0 ? colors.primaryGreenLight : colors.dangerLight,
                             },
                           ]}
                         >
-                          {remainingBudget >= 0 ? 'Saved' : 'Deficit'}
-                        </Text>
+                          <Text style={[styles.badgePillText, { color: remainingBudget >= 0 ? colors.primaryGreen : colors.danger }]}>
+                            {remainingBudget >= 0 ? 'Surplus' : 'Deficit'}
+                          </Text>
+                        </View>
                       </View>
-                      <Text style={[styles.metricValue, { fontSize: 20, marginTop: 4, color: remainingBudget >= 0 ? colors.textMain : colors.danger }]} numberOfLines={1} adjustsFontSizeToFit>
+                      <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Monthly Balance</Text>
+                      <Text style={[styles.metricValue, { color: remainingBudget >= 0 ? colors.textMain : colors.danger }]} numberOfLines={1} adjustsFontSizeToFit>
                         {currencySymbol} {remainingBudget.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                      </Text>
+                    </View>
+
+                    {/* Card 4: Savings Rate */}
+                    <View
+                      style={[
+                        styles.metricCard,
+                        {
+                          backgroundColor: colors.bgCard,
+                          borderColor: colors.borderSoft,
+                          ...colors.cardShadow,
+                        },
+                      ]}
+                    >
+                      <TotoroSticker type="curious" size={42} style={styles.cardCornerSticker} />
+                      <View style={styles.metricHeaderRow}>
+                        <View style={[styles.paperIconBadge, { backgroundColor: colors.primaryGreenLight, borderColor: colors.primaryGreenLight }]}>
+                          <Ionicons name="trending-up-outline" size={15} color={colors.primaryGreen} />
+                        </View>
+                        <View style={[styles.badgePill, { backgroundColor: colors.primaryGreenLight, borderColor: colors.primaryGreenLight }]}>
+                          <Text style={[styles.badgePillText, { color: colors.primaryGreen }]}>Rate</Text>
+                        </View>
+                      </View>
+                      <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Savings Ratio</Text>
+                      <Text style={[styles.metricValue, { color: colors.primaryGreen }]} numberOfLines={1} adjustsFontSizeToFit>
+                        {totalIncome > 0 ? Math.max(0, Math.round(((totalIncome - totalSpent) / totalIncome) * 100)) + '%' : '0%'}
                       </Text>
                     </View>
                   </>
@@ -964,7 +1116,7 @@ export default function HomeScreen() {
                     style={[styles.primaryActionText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}
                     numberOfLines={1}
                   >
-                    Add Expense 💸
+                    Add Expense
                   </Text>
                 </TouchableOpacity>
 
@@ -982,8 +1134,8 @@ export default function HomeScreen() {
                     {
                       flex: 1,
                       backgroundColor: colors.bgCard,
-                      borderColor: colors.borderSoft,
-                      borderWidth: 1,
+                      borderColor: 'transparent',
+                      borderWidth: 0,
                       ...colors.cardShadow,
                     },
                   ]}
@@ -993,14 +1145,14 @@ export default function HomeScreen() {
                     style={[styles.secondaryActionText, { color: colors.textMain }]}
                     numberOfLines={1}
                   >
-                    Income 💰
+                    Add Income
                   </Text>
                 </TouchableOpacity>
               </View>
 
               {/* MONTHLY RECURRING & BILLS (Utilities, Rent, Groceries, etc.) */}
               {showMonthlyBills && (
-                <View style={[styles.envelopesCard, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft, borderWidth: 1, ...colors.cardShadow }]}>
+                <View style={[styles.envelopesCard, { backgroundColor: colors.bgCard, ...colors.cardShadow }]}>
                   {/* Card Header */}
                   <View style={styles.envelopeCardHeader}>
                     <View style={styles.envelopeTitleContainer}>
@@ -1035,7 +1187,7 @@ export default function HomeScreen() {
                       <TouchableOpacity
                         activeOpacity={0.7}
                         onPress={() => setIsAddEnvelopeModalOpen(true)}
-                        style={[styles.addCategoryPillBtn, { backgroundColor: theme === 'kawaii' ? '#f4f8f4' : colors.bgCardAlt, borderColor: colors.borderSoft }]}
+                        style={[styles.addCategoryPillBtn, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}
                       >
                         <Text style={[styles.addCategoryPillText, { color: colors.textMain }]} numberOfLines={1}>+ Add Bill</Text>
                       </TouchableOpacity>
@@ -1049,24 +1201,16 @@ export default function HomeScreen() {
                       <Text style={[styles.emptyEnvelopeSub, { color: colors.textMuted }]}>
                         Plan and track recurring monthly essentials like Electricity, Water, Rent, Groceries, and Wi-Fi. Set expected monthly amounts and track actual spending.
                       </Text>
-                      {/* <TouchableOpacity
-                        activeOpacity={0.8}
-                        onPress={() => setIsAddEnvelopeModalOpen(true)}
-                        style={[styles.addFirstEnvelopeBtn, { backgroundColor: colors.primaryAccent }]}
-                      >
-                        <Ionicons name="add" size={16} color="#2c352d" />
-                        <Text style={styles.addFirstEnvelopeText}>+ Add Recurring Bill / Utility</Text>
-                      </TouchableOpacity> */}
                     </View>
                   ) : envelopeViewMode === 'table' ? (
                     /* TABLE VIEW */
                     <View style={styles.envelopeTable}>
                       {/* Table Column Headers */}
-                      <View style={[styles.tableHeaderRow, { backgroundColor: theme === 'kawaii' ? '#eaf4eb' : colors.bgSecondary }]}>
-                        <Text style={[styles.colHeaderCategory, { color: theme === 'kawaii' ? '#5a6e5b' : colors.textMuted }]}>
+                      <View style={[styles.tableHeaderRow, { backgroundColor: colors.bgSecondary }]}>
+                        <Text style={[styles.colHeaderCategory, { color: colors.textMuted }]}>
                           RECURRING BILL / UTILITY
                         </Text>
-                        <Text style={[styles.colHeaderBudgeted, { color: theme === 'kawaii' ? '#5a6e5b' : colors.textMuted }]}>
+                        <Text style={[styles.colHeaderBudgeted, { color: colors.textMuted }]}>
                           MONTHLY BUDGET
                         </Text>
                       </View>
@@ -1084,7 +1228,7 @@ export default function HomeScreen() {
                           }}
                           style={[
                             styles.tableRowItem,
-                            { borderBottomColor: colors.borderSoft },
+                            { borderBottomColor: 'rgba(0,0,0,0.05)' },
                             idx === envelopeStats.length - 1 && { borderBottomWidth: 0 },
                           ]}
                         >
@@ -1115,7 +1259,7 @@ export default function HomeScreen() {
                       ))}
 
                       {/* TOTAL Highlight Row */}
-                      <View style={[styles.tableTotalRow, { backgroundColor: theme === 'kawaii' ? '#eaf4eb' : colors.bgSecondary }]}>
+                      <View style={[styles.tableTotalRow, { backgroundColor: colors.bgSecondary }]}>
                         <Text style={[styles.totalLabelText, { color: colors.textMain }]}>TOTAL MONTHLY BUDGET</Text>
                         <Text style={[styles.totalValueText, { color: colors.textMain }]} numberOfLines={1} adjustsFontSizeToFit>
                           {currencySymbol} {totalEnvelopesBudgeted.toFixed(2)}
@@ -1167,7 +1311,7 @@ export default function HomeScreen() {
               )}
 
               {/* Recent Expenses List */}
-              <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft, borderWidth: 1, ...colors.cardShadow }]}>
+              <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, ...colors.cardShadow }]}>
                 <View style={styles.sectionHeaderRow}>
                   <Text style={[styles.sectionTitle, { color: colors.textMain }]}>Recent Expenses 🧾</Text>
                   <Text style={[styles.countBadge, { color: colors.textMuted }]}>{filteredExpenses.length} total</Text>
@@ -1201,75 +1345,93 @@ export default function HomeScreen() {
                   </View>
                 )}
 
-                <View style={styles.transactionList}>
-                  {filteredExpenses.map((exp) => {
-                    const linkedBill = exp.recurringBillId ? envelopes.find((b) => b.id === exp.recurringBillId) : null;
-                    const catEmoji = getCategoryEmoji(exp.category);
-                    const catTotal = categorySpentMap.get(exp.category.trim().toLowerCase()) || exp.amount;
-                    return (
-                      <View key={exp.id} style={[styles.txItem, { borderBottomColor: colors.borderSoft }]}>
-                        <View style={styles.txLeft}>
-                          <View style={[styles.txEmojiCircle, { backgroundColor: colors.bgSecondary }]}>
-                            <Text style={styles.txEmoji}>{catEmoji}</Text>
-                          </View>
-                          <View style={styles.txInfo}>
-                            <Text style={[styles.txTitle, { color: colors.textMain }]} numberOfLines={1}>{exp.reason}</Text>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
-                              <Text style={[styles.txSub, { color: colors.textMuted, marginTop: 0 }]}>
-                                {exp.date} • {exp.stored}
-                              </Text>
-                              {/* Category Spent Badge */}
-                              <View style={[styles.badgePill, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft, borderWidth: 1, paddingVertical: 1 }]}>
-                                <Text style={{ fontSize: 10, color: colors.textMain, fontWeight: '700' }} numberOfLines={1}>
-                                  {catEmoji} {exp.category} ({currencySymbol} {catTotal.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} total)
+                {filteredExpenses.length === 0 ? (
+                  <View style={styles.emptyEnvelopeBox}>
+                    <Text style={[styles.emptyEnvelopeTitle, { color: colors.textMain }]}>No Expenses Recorded</Text>
+                    <Text style={[styles.emptyEnvelopeSub, { color: colors.textMuted }]}>
+                      Tap &ldquo;- Expense&rdquo; above to record an outflow for this period.
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.transactionList}>
+                    {filteredExpenses.map((exp) => {
+                      const linkedBill = exp.recurringBillId ? envelopes.find((b) => b.id === exp.recurringBillId) : null;
+                      const catEmoji = getCategoryEmoji(exp.category);
+                      const catTotal = categorySpentMap.get(exp.category.trim().toLowerCase()) || exp.amount;
+                      return (
+                        <View key={exp.id} style={[styles.txItem, { borderBottomColor: 'rgba(0,0,0,0.05)' }]}>
+                          <View style={styles.txLeft}>
+                            <View style={[styles.txEmojiCircle, { backgroundColor: colors.bgSecondary }]}>
+                              <Text style={styles.txEmoji}>{catEmoji}</Text>
+                            </View>
+                            <View style={styles.txInfo}>
+                              <Text style={[styles.txTitle, { color: colors.textMain }]} numberOfLines={1}>{exp.reason}</Text>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
+                                <Text style={[styles.txSub, { color: colors.textMuted, marginTop: 0 }]}>
+                                  {exp.date} • {exp.stored}
                                 </Text>
-                              </View>
-                              {linkedBill && (
-                                <View style={[styles.badgePill, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft, borderWidth: 1, paddingVertical: 1 }]}>
+                                {/* Category Spent Badge */}
+                                <View style={[styles.badgePill, { backgroundColor: colors.bgSecondary, paddingVertical: 1 }]}>
                                   <Text style={{ fontSize: 10, color: colors.textMain, fontWeight: '700' }} numberOfLines={1}>
-                                    {linkedBill.emoji} {linkedBill.name}
+                                    {catEmoji} {exp.category} ({currencySymbol} {catTotal.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} total)
                                   </Text>
                                 </View>
-                              )}
+                                {linkedBill && (
+                                  <View style={[styles.badgePill, { backgroundColor: colors.bgSecondary, paddingVertical: 1 }]}>
+                                    <Text style={{ fontSize: 10, color: colors.textMain, fontWeight: '700' }} numberOfLines={1}>
+                                      {linkedBill.emoji} {linkedBill.name}
+                                    </Text>
+                                  </View>
+                                )}
+                              </View>
                             </View>
                           </View>
+                          <Text style={[styles.txExpenseAmount, { color: colors.danger }]} numberOfLines={1} adjustsFontSizeToFit>
+                            -{currencySymbol} {exp.amount.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                          </Text>
                         </View>
-                        <Text style={[styles.txExpenseAmount, { color: colors.danger }]} numberOfLines={1} adjustsFontSizeToFit>
-                          -{currencySymbol} {exp.amount.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
-                        </Text>
-                      </View>
-                    );
-                  })}
-                </View>
+                      );
+                    })}
+                  </View>
+                )}
               </View>
 
               {/* Income Streams List */}
-              <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft, borderWidth: 1, ...colors.cardShadow }]}>
+              <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, ...colors.cardShadow }]}>
                 <View style={styles.sectionHeaderRow}>
                   <Text style={[styles.sectionTitle, { color: colors.textMain }]}>Income Streams 💵</Text>
                   <Text style={[styles.countBadge, { color: colors.textMuted }]}>{filteredIncomes.length} items</Text>
                 </View>
 
-                <View style={styles.transactionList}>
-                  {filteredIncomes.map((inc) => (
-                    <View key={inc.id} style={[styles.txItem, { borderBottomColor: colors.borderSoft }]}>
-                      <View style={styles.txLeft}>
-                        <View style={[styles.txEmojiCircle, { backgroundColor: colors.bgSecondary }]}>
-                          <Text style={styles.txEmoji}>👛</Text>
+                {filteredIncomes.length === 0 ? (
+                  <View style={styles.emptyEnvelopeBox}>
+                    <Text style={[styles.emptyEnvelopeTitle, { color: colors.textMain }]}>No Additional Income</Text>
+                    <Text style={[styles.emptyEnvelopeSub, { color: colors.textMuted }]}>
+                      Tap &ldquo;+ Income&rdquo; above to record freelance, bonus, or investment returns.
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.transactionList}>
+                    {filteredIncomes.map((inc) => (
+                      <View key={inc.id} style={[styles.txItem, { borderBottomColor: 'rgba(0,0,0,0.05)' }]}>
+                        <View style={styles.txLeft}>
+                          <View style={[styles.txEmojiCircle, { backgroundColor: colors.bgSecondary }]}>
+                            <Text style={styles.txEmoji}>👛</Text>
+                          </View>
+                          <View style={styles.txInfo}>
+                            <Text style={[styles.txTitle, { color: colors.textMain }]} numberOfLines={1}>{inc.note}</Text>
+                            <Text style={[styles.txSub, { color: colors.textMuted }]}>
+                              {inc.date} • {inc.stored}
+                            </Text>
+                          </View>
                         </View>
-                        <View style={styles.txInfo}>
-                          <Text style={[styles.txTitle, { color: colors.textMain }]} numberOfLines={1}>{inc.note}</Text>
-                          <Text style={[styles.txSub, { color: colors.textMuted }]}>
-                            {inc.date} • {inc.stored}
-                          </Text>
-                        </View>
+                        <Text style={[styles.txIncomeAmount, { color: colors.primaryGreen }]} numberOfLines={1} adjustsFontSizeToFit>
+                          +{currencySymbol} {inc.amount.toLocaleString()}
+                        </Text>
                       </View>
-                      <Text style={[styles.txIncomeAmount, { color: colors.primaryGreen }]} numberOfLines={1} adjustsFontSizeToFit>
-                        +{currencySymbol} {inc.amount.toLocaleString()}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
+                    ))}
+                  </View>
+                )}
               </View>
             </View>
           )}
@@ -1277,7 +1439,7 @@ export default function HomeScreen() {
           {/* ===================== VIEW 2: CALENDAR ===================== */}
           {activeSegment === 'calendar' && (
             <View style={styles.viewContainer}>
-              <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft, borderWidth: 1, ...colors.cardShadow }]}>
+              <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, ...colors.cardShadow }]}>
                 <View style={styles.calendarNavRow}>
                   <TouchableOpacity
                     onPress={handlePrevCalMonth}
@@ -1339,7 +1501,7 @@ export default function HomeScreen() {
                       bgColor = colors.primaryGreen;
                       borderColor = colors.primaryGreen;
                       borderWidth = 1;
-                      textColor = '#ffffff';
+                      textColor = colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214');
                     }
 
                     return (
@@ -1381,7 +1543,7 @@ export default function HomeScreen() {
                                   {
                                     marginTop: 0,
                                     backgroundColor: isSelected || isToday
-                                      ? (theme === 'kawaii' && isSelected ? '#2c352d' : '#ffffff')
+                                      ? (colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214'))
                                       : colors.primaryGreen,
                                   },
                                 ]}
@@ -1394,7 +1556,7 @@ export default function HomeScreen() {
                                 {
                                   marginTop: 0,
                                   backgroundColor: isSelected || isToday
-                                    ? (theme === 'kawaii' && isSelected ? '#2c352d' : '#ffffff')
+                                    ? (colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214'))
                                     : colors.primaryGreen,
                                 },
                               ]}
@@ -1407,7 +1569,7 @@ export default function HomeScreen() {
                                 {
                                   marginTop: 0,
                                   backgroundColor: isSelected || isToday
-                                    ? (theme === 'kawaii' && isSelected ? '#2c352d' : '#ffffff')
+                                    ? (colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214'))
                                     : colors.danger,
                                 },
                               ]}
@@ -1437,7 +1599,7 @@ export default function HomeScreen() {
               </View>
 
               {/* Selected Day Log */}
-              <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft, borderWidth: 1, ...colors.cardShadow }]}>
+              <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, ...colors.cardShadow }]}>
                 <Text style={[styles.sectionTitle, { color: colors.textMain, marginBottom: 12 }]}>
                   Transactions for Day {selectedDay} 🗓️
                 </Text>
@@ -1451,7 +1613,7 @@ export default function HomeScreen() {
                     {dayIncomes.map((inc) => {
                       const isSalary = inc.note.toLowerCase().includes('monthly base salary');
                       return (
-                        <View key={inc.id} style={[styles.txItem, { borderBottomColor: colors.borderSoft }]}>
+                        <View key={inc.id} style={[styles.txItem, { borderBottomColor: 'rgba(0,0,0,0.05)' }]}>
                           <View style={styles.txLeft}>
                             <View style={[styles.txEmojiCircle, { backgroundColor: colors.bgSecondary }]}>
                               <Text style={styles.txEmoji}>{isSalary ? '💼' : '👛'}</Text>
@@ -1488,7 +1650,7 @@ export default function HomeScreen() {
                       const catEmoji = getCategoryEmoji(e.category);
                       const catTotal = categorySpentMap.get(e.category.trim().toLowerCase()) || e.amount;
                       return (
-                        <View key={e.id} style={[styles.txItem, { borderBottomColor: colors.borderSoft }]}>
+                        <View key={e.id} style={[styles.txItem, { borderBottomColor: 'rgba(0,0,0,0.05)' }]}>
                           <View style={styles.txLeft}>
                             <View style={[styles.txEmojiCircle, { backgroundColor: colors.bgSecondary }]}>
                               <Text style={styles.txEmoji}>{catEmoji}</Text>
@@ -1498,13 +1660,13 @@ export default function HomeScreen() {
                               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
                                 <Text style={[styles.txSub, { color: colors.textMuted, marginTop: 0 }]}>{e.date} • {e.stored}</Text>
                                 {/* Category Spent Badge */}
-                                <View style={[styles.badgePill, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft, borderWidth: 1, paddingVertical: 1 }]}>
+                                <View style={[styles.badgePill, { backgroundColor: colors.bgSecondary, paddingVertical: 1 }]}>
                                   <Text style={{ fontSize: 10, color: colors.textMain, fontWeight: '700' }} numberOfLines={1}>
                                     {catEmoji} {e.category} ({currencySymbol} {catTotal.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} total)
                                   </Text>
                                 </View>
                                 {linkedBill && (
-                                  <View style={[styles.badgePill, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft, borderWidth: 1, paddingVertical: 1 }]}>
+                                  <View style={[styles.badgePill, { backgroundColor: colors.bgSecondary, paddingVertical: 1 }]}>
                                     <Text style={{ fontSize: 10, color: colors.textMain, fontWeight: '700' }} numberOfLines={1}>
                                       {linkedBill.emoji} {linkedBill.name}
                                     </Text>
@@ -1529,7 +1691,7 @@ export default function HomeScreen() {
           {activeSegment === 'analytics' && (
             <View style={styles.viewContainer}>
               {/* Category Breakdown Rings/Bars */}
-              <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft, borderWidth: 1, ...colors.cardShadow }]}>
+              <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, ...colors.cardShadow }]}>
                 <Text style={[styles.sectionTitle, { color: colors.textMain }]}>Spending Breakdown 🍩</Text>
                 <Text style={[styles.sectionSubtitle, { color: colors.textMuted, marginBottom: 16 }]}>
                   Share of monthly budget by category
@@ -1551,7 +1713,7 @@ export default function HomeScreen() {
               </View>
 
               {/* Income vs Outflow Comparison */}
-              <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft, borderWidth: 1, ...colors.cardShadow }]}>
+              <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, ...colors.cardShadow }]}>
                 <Text style={[styles.sectionTitle, { color: colors.textMain }]}>Inflow vs Outflow 📊</Text>
                 <Text style={[styles.sectionSubtitle, { color: colors.textMuted, marginBottom: 16 }]}>
                   Net monthly cash balance
@@ -1585,9 +1747,14 @@ export default function HomeScreen() {
                   </View>
                 </View>
               </View>
-            </View>
-          )}
-        </ScrollView>
+              {/* Bottom Totoro Parade */}
+                <View style={styles.dashboardParade}>
+                  <TotoroSticker type="parade" height={64} />
+                  <Text style={[styles.totoroParadeCaption, { color: colors.textMuted, marginTop: 6 }]}>🐾 ~ Walking with Totoro ~ 🐾</Text>
+                </View>
+              </View>
+            )}
+          </ScrollView>
       </>
 
       {/* ===================== MODAL 1: ADD EXPENSE ===================== */}
@@ -1621,10 +1788,22 @@ export default function HomeScreen() {
                   onPress={() => setExpCategory(c.name)}
                   style={[
                     styles.choiceChip,
-                    { backgroundColor: isSelected ? colors.primaryAccent : colors.bgSecondary },
+                    {
+                      backgroundColor: isSelected ? colors.primaryAccent : colors.bgSecondary,
+                      borderColor: 'transparent',
+                      borderWidth: 0,
+                    },
                   ]}
                 >
-                  <Text style={[styles.choiceChipText, { color: isSelected ? (colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214')) : colors.textMuted }]}>
+                  <Text
+                    style={[
+                      styles.choiceChipText,
+                      {
+                        color: isSelected ? (colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214')) : colors.textMuted,
+                        fontWeight: isSelected ? '800' : '600',
+                      },
+                    ]}
+                  >
                     {c.name}
                   </Text>
                 </TouchableOpacity>
@@ -1651,8 +1830,8 @@ export default function HomeScreen() {
                   styles.choiceChip,
                   {
                     backgroundColor: !expRecurringBillId ? colors.primaryAccent : colors.bgSecondary,
-                    borderWidth: 1,
-                    borderColor: !expRecurringBillId ? (colors.borderAccent || colors.primaryAccent) : colors.borderSoft,
+                    borderWidth: 0,
+                    borderColor: 'transparent',
                   },
                 ]}
               >
@@ -1678,8 +1857,8 @@ export default function HomeScreen() {
                       styles.choiceChip,
                       {
                         backgroundColor: isSelected ? colors.primaryAccent : colors.bgSecondary,
-                        borderWidth: 1,
-                        borderColor: isSelected ? (colors.borderAccent || colors.primaryAccent) : colors.borderSoft,
+                        borderWidth: 0,
+                        borderColor: 'transparent',
                       },
                     ]}
                   >
@@ -1727,7 +1906,7 @@ export default function HomeScreen() {
                 setDatePickerTarget('expense');
                 setIsDatePickerOpen(true);
               }}
-              style={{ padding: 12, borderRadius: 14, backgroundColor: colors.bgSecondary, borderWidth: 1, borderColor: colors.borderSoft }}
+              style={{ padding: 12, borderRadius: 14, backgroundColor: colors.bgSecondary,  }}
             >
               <Ionicons name="calendar-outline" size={20} color={colors.primaryAccent} />
             </TouchableOpacity>
@@ -1745,10 +1924,22 @@ export default function HomeScreen() {
                   onPress={() => setExpAccount(acc.name)}
                   style={[
                     styles.choiceChip,
-                    { backgroundColor: isSelected ? colors.primaryAccent : colors.bgSecondary },
+                    {
+                      backgroundColor: isSelected ? colors.primaryAccent : colors.bgSecondary,
+                      borderColor: 'transparent',
+                      borderWidth: 0,
+                    },
                   ]}
                 >
-                  <Text style={[styles.choiceChipText, { color: isSelected ? (colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214')) : colors.textMuted }]}>
+                  <Text
+                    style={[
+                      styles.choiceChipText,
+                      {
+                        color: isSelected ? (colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214')) : colors.textMuted,
+                        fontWeight: isSelected ? '800' : '600',
+                      },
+                    ]}
+                  >
                     {acc.emoji} {acc.name}
                   </Text>
                 </TouchableOpacity>
@@ -1813,7 +2004,7 @@ export default function HomeScreen() {
                 setDatePickerTarget('income');
                 setIsDatePickerOpen(true);
               }}
-              style={{ padding: 12, borderRadius: 14, backgroundColor: colors.bgSecondary, borderWidth: 1, borderColor: colors.borderSoft }}
+              style={{ padding: 12, borderRadius: 14, backgroundColor: colors.bgSecondary,  }}
             >
               <Ionicons name="calendar-outline" size={20} color={colors.primaryGreen} />
             </TouchableOpacity>
@@ -1831,10 +2022,24 @@ export default function HomeScreen() {
                   onPress={() => setIncAccount(acc.name)}
                   style={[
                     styles.choiceChip,
-                    { backgroundColor: isSelected ? colors.primaryGreen : colors.bgSecondary },
+                    {
+                      backgroundColor: isSelected ? colors.primaryAccent : colors.bgSecondary,
+                      borderColor: 'transparent',
+                      borderWidth: 0,
+                    },
                   ]}
                 >
-                  <Text style={[styles.choiceChipText, { color: isSelected ? '#ffffff' : colors.textMuted }]}>
+                  <Text
+                    style={[
+                      styles.choiceChipText,
+                      {
+                        color: isSelected
+                          ? (colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214'))
+                          : colors.textMuted,
+                        fontWeight: isSelected ? '800' : '600',
+                      },
+                    ]}
+                  >
                     {acc.emoji} {acc.name}
                   </Text>
                 </TouchableOpacity>
@@ -1845,9 +2050,11 @@ export default function HomeScreen() {
 
         <TouchableOpacity
           onPress={handleAddIncomeSubmit}
-          style={[styles.submitButton, { backgroundColor: colors.primaryGreen }]}
+          style={[styles.submitButton, { backgroundColor: colors.primaryAccent }]}
         >
-          <Text style={styles.submitButtonTextWhite}>Save Income 💰</Text>
+          <Text style={[styles.submitButtonText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}>
+            Save Income 💰
+          </Text>
         </TouchableOpacity>
       </AestheticModal>
 
@@ -2125,8 +2332,8 @@ export default function HomeScreen() {
                 paddingVertical: 12,
                 borderRadius: 14,
                 backgroundColor: colors.bgSecondary,
-                borderColor: colors.borderSoft,
-                borderWidth: 1,
+                borderColor: 'transparent',
+                borderWidth: 0,
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
@@ -2191,11 +2398,93 @@ export default function HomeScreen() {
           }
         }}
       />
+    </ImageBackground>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  screenGridBg: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+  },
+  hangingPlantSticker: {
+    position: 'absolute',
+    right: 14,
+    top: -26,
+    zIndex: 10,
+  },
+  peekingCatSticker: {
+    position: 'absolute',
+    right: 14,
+    top: -24,
+    zIndex: 10,
+  },
+  totoroHeroCard: {
+    borderRadius: 24,
+    borderWidth: 0,
+    padding: 18,
+    marginBottom: 16,
+    position: 'relative',
+    overflow: 'visible',
+  },
+  totoroHeroTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  totoroHeroTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  heroPeekSticker: {
+    position: 'absolute',
+    right: 12,
+    top: -20,
+    zIndex: 10,
+  },
+  totoroHeroContent: {
+    paddingTop: 4,
+  },
+  totoroHeroSub: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  totoroHeroAmountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  totoroHeroAmount: {
+    fontSize: 26,
+    fontWeight: '900',
+    letterSpacing: -0.5,
+    flex: 1,
+  },
+  totoroHeroBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+    borderWidth: 0,
+  },
+  totoroHeroBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  dashboardParade: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 18,
+    marginTop: 8,
+  },
+
   safeArea: {
     flex: 1,
   },
@@ -2207,15 +2496,50 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     gap: 16,
   },
+  cardCornerSticker: {
+    position: 'absolute',
+    bottom: 8,
+    right: 18,
+    zIndex: 10,
+  },
+  totoroParadeBottom: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 18,
+    marginBottom: 10,
+    gap: 6,
+  },
+  totoroParadeCaption: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
   metricsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  paperIconBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    borderWidth: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgePillText: {
+    fontSize: 10,
+    fontWeight: '700',
   },
   metricCard: {
-    width: (width - 52) / 2,
+    width: (width - 40 - 10) / 2,
     borderRadius: 20,
+    borderWidth: 0,
     padding: 14,
+    minHeight: 126,
+    position: 'relative',
+    overflow: 'visible',
   },
   metricHeaderRow: {
     flexDirection: 'row',
@@ -2232,6 +2556,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 8,
+    borderWidth: 0,
   },
   metricLabel: {
     fontSize: 12,
@@ -2241,6 +2566,7 @@ const styles = StyleSheet.create({
   metricValue: {
     fontSize: 16,
     fontWeight: '800',
+    maxWidth: '72%',
   },
   actionButtonsRow: {
     flexDirection: 'row',
@@ -2251,8 +2577,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
+    paddingVertical: 13,
     borderRadius: 16,
+    borderWidth: 0,
     gap: 6,
   },
   primaryActionText: {
@@ -2264,8 +2591,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
+    paddingVertical: 13,
     borderRadius: 16,
+    borderWidth: 0,
     gap: 6,
   },
   secondaryActionText: {
@@ -2274,6 +2602,7 @@ const styles = StyleSheet.create({
   },
   sectionCard: {
     borderRadius: 24,
+    borderWidth: 0,
     padding: 18,
   },
   sectionHeaderRow: {
@@ -2389,7 +2718,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 12,
-    borderWidth: 1,
+    borderWidth: 0,
     marginRight: 8,
   },
   catSpendChipEmoji: {
@@ -2527,12 +2856,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   input: {
-    borderRadius: 14,
+    borderRadius: 16,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 12,
     fontSize: 14,
     fontWeight: '600',
-    borderWidth: 1,
+    borderWidth: 0,
   },
   chipsScroll: {
     marginTop: 4,
@@ -2596,8 +2925,9 @@ const styles = StyleSheet.create({
   },
   // Cash Envelopes Table Styles (Matching Reference)
   envelopesCard: {
-    borderRadius: 28,
-    padding: 16,
+    borderRadius: 24,
+    borderWidth: 0,
+    padding: 18,
   },
   envelopeCardHeader: {
     flexDirection: 'row',
@@ -2636,7 +2966,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 12,
-    borderWidth: 1,
+    borderWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -2644,7 +2974,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 14,
-    borderWidth: 1,
+    borderWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -2727,7 +3057,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 10,
-    borderWidth: 1,
+    borderWidth: 0,
   },
   deleteCategoryText: {
     fontSize: 13,
@@ -2761,7 +3091,6 @@ const styles = StyleSheet.create({
   addFirstEnvelopeText: {
     fontSize: 13,
     fontWeight: '800',
-    color: '#2c352d',
   },
   suggestionChip: {
     flexDirection: 'row',
@@ -2769,7 +3098,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 14,
-    borderWidth: 1,
+    borderWidth: 0,
     marginRight: 8,
   },
   dashboardMonthBar: {
@@ -2796,7 +3125,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
-    borderWidth: 1,
+    borderWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -2810,8 +3139,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     padding: 14,
     borderRadius: 18,
-    borderWidth: 1.5,
-    borderStyle: 'dashed',
+    borderWidth: 0,
   },
   devModeHeader: {
     flexDirection: 'row',

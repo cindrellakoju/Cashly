@@ -160,7 +160,7 @@ export const PinKeypad: React.FC<PinKeypadProps> = ({ onSuccess }) => {
                   onPress={() => handleDigitPress(item)}
                   style={[
                     styles.keyButton,
-                    { backgroundColor: colors.bgCard, borderColor: colors.borderSoft, borderWidth: 1, ...colors.cardShadow },
+                    { backgroundColor: colors.bgCard, borderColor: 'transparent', borderWidth: 0, ...colors.cardShadow },
                   ]}
                 >
                   <Text style={[styles.keyText, { color: colors.textMain }]}>{item}</Text>
@@ -199,7 +199,7 @@ const styles = StyleSheet.create({
     width: 76,
     height: 76,
     borderRadius: 38,
-    borderWidth: 1.5,
+    borderWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,

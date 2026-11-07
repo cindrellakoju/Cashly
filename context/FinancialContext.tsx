@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Linking from 'expo-linking';
-import { AppTheme, THEMES, ThemeColors, THEME_STICKERS, ThemeStickers } from '@/constants/theme';
+import { AppTheme, THEMES, ThemeColors, THEME_STICKERS, ThemeStickers, StickerPack } from '@/constants/theme';
 import { sendPinRecoveryEmail } from '@/services/emailService';
 
 export type TransactionType =
@@ -183,6 +183,7 @@ const INITIAL_TRANSACTIONS: Transaction[] = [];
 
 interface FinancialContextType {
   theme: AppTheme;
+  stickerPack: StickerPack;
   colors: ThemeColors;
   stickers: ThemeStickers;
   salary: number;
@@ -231,6 +232,7 @@ interface FinancialContextType {
 
   // Actions
   setTheme: (theme: AppTheme) => Promise<void> | void;
+  setStickerPack: (pack: StickerPack) => Promise<void>;
   setCurrencySymbol: (symbol: string) => void;
   unlockVault: (pin: string) => boolean;
   lockVault: () => void;
@@ -360,6 +362,7 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState<boolean>(false);
   const [isWelcomeActive, setIsWelcomeActive] = useState<boolean>(true);
   const [theme, setThemeState] = useState<AppTheme>('kawaii');
+  const [stickerPack, setStickerPackState] = useState<StickerPack>('totoro');
   const [currencySymbol, setCurrencySymbolState] = useState<string>('Rs.');
   const [salary, setSalary] = useState<number>(0);
   const [hasBaseSalary, setHasBaseSalary] = useState<boolean | null>(null);
@@ -446,8 +449,18 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           recoveryEmail: '',
         };
         const loaded = await initDatabase(defaultData);
-        if (loaded.theme) {
-          setThemeState(loaded.theme);
+        const hasSwitchedToKawaii = await AsyncStorage.getItem('cashly_switched_to_kawaii_v1');
+        if (!hasSwitchedToKawaii) {
+          await AsyncStorage.setItem('cashly_switched_to_kawaii_v1', 'true');
+          await saveAppSetting('theme', 'kawaii');
+          setThemeState('kawaii');
+        } else if (loaded.theme) {
+          const validThemes: AppTheme[] = ['paper', 'paperDark', 'kawaii', 'dreamy', 'fresh', 'playful', 'midnight', 'noir'];
+          const t = (loaded.theme === 'noir' || loaded.theme === 'paperDark') ? 'paperDark' : (validThemes.includes(loaded.theme as any) ? loaded.theme : 'kawaii');
+          setThemeState(t as AppTheme);
+        }
+        if (loaded.stickerPack) {
+          setStickerPackState(loaded.stickerPack);
         }
         setCurrencySymbolState(loaded.currencySymbol);
         setSalary(loaded.salary);
@@ -568,6 +581,11 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const setTheme = async (newTheme: AppTheme) => {
     setThemeState(newTheme);
     await saveAppSetting('theme', newTheme);
+  };
+
+  const setStickerPack = async (newPack: StickerPack) => {
+    setStickerPackState(newPack);
+    await saveAppSetting('sticker_pack', newPack);
   };
 
   const verifyAdminPin = (entered: string): boolean => {
@@ -1821,6 +1839,7 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       // Reset Appearance & Preferences
       setThemeState('kawaii');
+      setStickerPackState('totoro');
       setCurrencySymbolState('Rs.');
       setShowMonthlyBillsState(true);
 
@@ -1884,7 +1903,9 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     };
     const loaded = await loadAllData(defaultData);
     if (loaded.theme) {
-      setThemeState(loaded.theme);
+      const validThemes: AppTheme[] = ['paper', 'paperDark', 'kawaii', 'dreamy', 'fresh', 'playful', 'midnight', 'noir'];
+      const t = (loaded.theme === 'noir' || loaded.theme === 'paperDark') ? 'paperDark' : (validThemes.includes(loaded.theme as any) ? loaded.theme : 'kawaii');
+      setThemeState(t as AppTheme);
     }
     setCurrencySymbolState(loaded.currencySymbol);
     setSalary(loaded.salary);
@@ -1927,13 +1948,14 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     return res;
   };
 
-  const colors = THEMES[theme];
-  const stickers = THEME_STICKERS[theme];
+  const colors = THEMES[theme] || THEMES.kawaii;
+  const stickers = THEME_STICKERS[theme] || THEME_STICKERS.kawaii;
 
   return (
     <FinancialContext.Provider
       value={{
         theme,
+        stickerPack,
         colors,
         stickers,
         salary,
@@ -1992,6 +2014,7 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         currencySymbol,
         setCurrencySymbol,
         setTheme,
+        setStickerPack,
         unlockVault,
         lockVault,
         togglePrivacyMask,

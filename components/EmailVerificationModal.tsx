@@ -9,11 +9,13 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  ImageBackground,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useFinancial } from '@/context/FinancialContext';
 import { sendVerificationEmail } from '@/services/emailService';
+import { TotoroSticker } from '@/components/TotoroStickers';
 
 interface EmailVerificationModalProps {
   visible?: boolean;
@@ -251,16 +253,31 @@ export const EmailVerificationModal: React.FC<EmailVerificationModalProps> = ({
       style={styles.keyboardAvoidingView}
     >
       <View style={[styles.backdrop, { backgroundColor: colors.bgPrimary }]}>
+        <ImageBackground
+          source={require('@/assets/images/grid_paper.png')}
+          resizeMode="repeat"
+          style={StyleSheet.absoluteFill}
+          imageStyle={{ opacity: 0.65 }}
+        />
         <View
           style={[
             styles.modalCard,
             {
               backgroundColor: colors.bgCard,
-              borderColor: colors.borderSoft,
+              borderColor: 'transparent',
+              borderWidth: 0,
+              borderRadius: 24,
+              position: 'relative',
+              overflow: 'visible',
               ...colors.cardShadow,
             },
           ]}
         >
+          <TotoroSticker
+            type="peek"
+            size={68}
+            style={{ position: 'absolute', top: -28, right: 18, zIndex: 10 }}
+          />
           <ScrollView
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
@@ -271,9 +288,16 @@ export const EmailVerificationModal: React.FC<EmailVerificationModalProps> = ({
               <TouchableOpacity
                 activeOpacity={0.8}
                 onPress={handleDevTapBadge}
-                style={[styles.stepBadge, { backgroundColor: '#e4f5e4' }]}
+                style={[
+                  styles.stepBadge,
+                  {
+                    backgroundColor: colors.primaryAccentLight || '#fdebef',
+                    borderColor: 'transparent',
+                    borderWidth: 0,
+                  },
+                ]}
               >
-                <Text style={[styles.stepBadgeText, { color: '#24783e' }]}>
+                <Text style={[styles.stepBadgeText, { color: colors.textMain }]}>
                   {badgeText}
                 </Text>
               </TouchableOpacity>
@@ -304,12 +328,12 @@ export const EmailVerificationModal: React.FC<EmailVerificationModalProps> = ({
 
             {/* Verified Success State */}
             {isVerified ? (
-              <View style={[styles.verifiedCard, { backgroundColor: '#d3f2db', borderColor: '#24783e' }]}>
-                <Ionicons name="checkmark-circle" size={36} color="#24783e" style={{ marginBottom: 6 }} />
-                <Text style={[styles.verifiedTitle, { color: '#24783e' }]}>
+              <View style={[styles.verifiedCard, { backgroundColor: colors.primaryGreenLight, borderColor: colors.primaryGreen }]}>
+                <Ionicons name="checkmark-circle" size={36} color={colors.primaryGreen} style={{ marginBottom: 6 }} />
+                <Text style={[styles.verifiedTitle, { color: colors.primaryGreen }]}>
                   Verified Successfully!
                 </Text>
-                <Text style={[styles.verifiedEmailText, { color: '#243326' }]}>
+                <Text style={[styles.verifiedEmailText, { color: colors.textMain }]}>
                   {emailInput.trim().toLowerCase()}
                 </Text>
               </View>
@@ -469,7 +493,7 @@ export const EmailVerificationModal: React.FC<EmailVerificationModalProps> = ({
                       <TouchableOpacity
                         activeOpacity={0.8}
                         onPress={handleDevBypass}
-                        style={[styles.devBypassBtn, { backgroundColor: '#fef3c7', borderColor: '#f59e0b', borderWidth: 1 }]}
+                        style={[styles.devBypassBtn, { backgroundColor: '#fef3c7', borderColor: 'transparent', borderWidth: 0 }]}
                       >
                         <Ionicons name="checkmark-done" size={14} color="#b45309" style={{ marginRight: 4 }} />
                         <Text style={[styles.devBypassBtnText, { color: '#b45309' }]}>Auto-Verify</Text>
@@ -539,7 +563,7 @@ const styles = StyleSheet.create({
     maxWidth: 380,
     maxHeight: '90%',
     borderRadius: 24,
-    borderWidth: 1,
+    borderWidth: 0,
     padding: 22,
   },
   stepContainer: {
@@ -593,9 +617,9 @@ const styles = StyleSheet.create({
   emailInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 14,
-    borderWidth: 1.5,
-    paddingHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: 0,
+    paddingHorizontal: 14,
     height: 48,
   },
   emailInput: {
@@ -632,8 +656,8 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   verifiedCard: {
-    borderRadius: 18,
-    borderWidth: 1.5,
+    borderRadius: 20,
+    borderWidth: 0,
     padding: 18,
     alignItems: 'center',
     justifyContent: 'center',
@@ -673,7 +697,7 @@ const styles = StyleSheet.create({
   backBtn: {
     height: 42,
     borderRadius: 14,
-    borderWidth: 1,
+    borderWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -683,10 +707,9 @@ const styles = StyleSheet.create({
   },
   devBypassCard: {
     marginTop: 14,
-    padding: 12,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderStyle: 'dashed',
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 0,
     gap: 6,
   },
   devBypassHeader: {

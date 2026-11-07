@@ -15,7 +15,8 @@ export const unstable_settings = {
 
 function RootNavigation() {
   const { theme, isDbLoaded } = useFinancial();
-  const statusBarStyle = theme === 'kawaii' ? 'dark' : 'light';
+  const isDarkTheme = theme === 'paperDark' || theme === 'midnight' || theme === 'noir';
+  const statusBarStyle = isDarkTheme ? 'light' : 'dark';
 
   useEffect(() => {
     if (isDbLoaded) {

@@ -11,6 +11,7 @@ import {
   Modal,
   Dimensions,
   Platform,
+  ImageBackground,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,6 +19,7 @@ import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { useFinancial, WishlistItem } from '@/context/FinancialContext';
 import { ThemeHeader } from '@/components/ThemeHeader';
+import { TotoroSticker } from '@/components/TotoroStickers';
 import { AestheticModal } from '@/components/AestheticModal';
 import { saveImageToPermanentStorage, resolveImageUrl } from '@/services/imageService';
 
@@ -168,6 +170,12 @@ export default function WishlistScreen() {
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.bgPrimary }]} edges={['top']}>
+      <ImageBackground
+        source={require('@/assets/images/grid_paper.png')}
+        resizeMode="repeat"
+        style={styles.screenGridBg}
+        imageStyle={{ opacity: 0.65 }}
+      >
       {/* Header */}
       <ThemeHeader
         title="Wishlist & Dreams 🎁"
@@ -192,15 +200,31 @@ export default function WishlistScreen() {
       >
         <View style={styles.container}>
           {/* Summary Progress Card */}
-          <View style={[styles.summaryCard, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft, borderWidth: 1, ...colors.cardShadow }]}>
+          <View
+            style={[
+              styles.summaryCard,
+              {
+                backgroundColor: colors.bgCard,
+                borderColor: 'transparent',
+                borderRadius: 22,
+                ...colors.cardShadow,
+              },
+            ]}
+          >
+            <TotoroSticker type="wishlist" size={60} style={{ position: 'absolute', top: -20, right: 14, zIndex: 10 }} />
             <View style={styles.summaryTop}>
-              <View>
-                <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Total Wishlist Target</Text>
-                <Text style={[styles.summaryTotal, { color: colors.textMain }]}>{currencySymbol} {totalValue.toLocaleString()}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <View style={[styles.paperIconBadge, { backgroundColor: colors.bgSecondary, borderColor: 'transparent' }]}>
+                  <Ionicons name="gift-outline" size={20} color={colors.textMain} />
+                </View>
+                <View>
+                  <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Total Wishlist Target</Text>
+                  <Text style={[styles.summaryTotal, { color: colors.textMain }]}>{currencySymbol} {totalValue.toLocaleString()}</Text>
+                </View>
               </View>
               <View style={[styles.badgePill, { backgroundColor: colors.primaryGreenLight }]}>
                 <Text style={[styles.badgeText, { color: colors.primaryGreen }]}>
-                  {purchasedCount} / {wishlist.length} Achieved 🎉
+                  {purchasedCount} / {wishlist.length} Achieved 
                 </Text>
               </View>
             </View>
@@ -208,9 +232,23 @@ export default function WishlistScreen() {
 
           {/* Wishlist Items List */}
           {wishlist.length === 0 ? (
-            <View style={[styles.emptyCard, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft }]}>
-              <Text style={styles.emptyEmoji}>🎁</Text>
-              <Text style={[styles.emptyTitle, { color: colors.textMain }]}>Your Wishlist is Empty!</Text>
+            <View
+              style={[
+                styles.emptyCard,
+                {
+                  backgroundColor: colors.bgCard,
+                  borderColor: 'transparent',
+                  borderRadius: 24,
+                    alignItems: 'center',
+                    paddingVertical: 24,
+                    ...colors.cardShadow,
+                },
+              ]}
+            >
+              <View style={{ alignItems: 'center', marginBottom: 4 }}>
+                <TotoroSticker type="wishlist" size={96} />
+              </View>
+              <Text style={[styles.emptyTitle, { color: colors.textMain, marginTop: 10 }]}>Your Wishlist is Empty</Text>
               <Text style={[styles.emptySub, { color: colors.textMuted }]}>
                 Add your dream gadgets, trips, and milestone purchases.
               </Text>
@@ -229,8 +267,9 @@ export default function WishlistScreen() {
                     styles.wishCard,
                     {
                       backgroundColor: colors.bgCard,
-                      borderColor: item.isPurchased ? colors.primaryGreen : colors.borderSoft,
-                      borderWidth: item.isPurchased ? 1.5 : 1,
+                      borderColor: 'transparent',
+                      borderWidth: 0,
+                      borderRadius: 22,
                       opacity: item.isPurchased ? 0.85 : 1,
                       ...colors.cardShadow,
                     },
@@ -330,6 +369,11 @@ export default function WishlistScreen() {
               );
             })
           )}
+          {wishlist.length > 0 && (
+            <View style={{ alignItems: 'center', marginTop: 22, marginBottom: 12 }}>
+              <TotoroSticker type="parade" height={48} />
+            </View>
+          )}
         </View>
       </ScrollView>
 
@@ -380,10 +424,9 @@ export default function WishlistScreen() {
                 onPress={pickImageFromDevice}
                 style={{
                   height: 100,
-                  borderRadius: 16,
-                  borderWidth: 2,
-                  borderColor: colors.borderSoft,
-                  borderStyle: 'dashed',
+                  borderRadius: 18,
+                  borderWidth: 0,
+                  borderColor: 'transparent',
                   backgroundColor: colors.bgSecondary,
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -409,10 +452,10 @@ export default function WishlistScreen() {
                 justifyContent: 'center',
                 gap: 6,
                 paddingVertical: 10,
-                borderRadius: 12,
+                borderRadius: 14,
                 backgroundColor: colors.bgSecondary,
-                borderWidth: 1,
-                borderColor: colors.borderSoft,
+                borderWidth: 0,
+                borderColor: 'transparent',
               }}
             >
               <Ionicons name="images-outline" size={16} color={colors.primaryAccent} />
@@ -428,10 +471,10 @@ export default function WishlistScreen() {
                 justifyContent: 'center',
                 gap: 6,
                 paddingVertical: 10,
-                borderRadius: 12,
+                borderRadius: 14,
                 backgroundColor: colors.bgSecondary,
-                borderWidth: 1,
-                borderColor: colors.borderSoft,
+                borderWidth: 0,
+                borderColor: 'transparent',
               }}
             >
               <Ionicons name="camera-outline" size={16} color={colors.primaryGreen} />
@@ -452,9 +495,9 @@ export default function WishlistScreen() {
                   onPress={() => setWishImageUrl(preset.url)}
                   style={{
                     marginRight: 8,
-                    borderRadius: 12,
-                    borderWidth: isSelected ? 2.5 : 1,
-                    borderColor: isSelected ? colors.primaryAccent : colors.borderSoft,
+                    borderRadius: 14,
+                    borderWidth: isSelected ? 2 : 0,
+                    borderColor: isSelected ? colors.primaryAccent : 'transparent',
                     overflow: 'hidden',
                   }}
                 >
@@ -588,11 +631,17 @@ export default function WishlistScreen() {
           )}
         </TouchableOpacity>
       </Modal>
+          </ImageBackground>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  screenGridBg: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+  },
   safeArea: {
     flex: 1,
   },
@@ -618,7 +667,8 @@ const styles = StyleSheet.create({
   },
   summaryCard: {
     borderRadius: 22,
-    padding: 16,
+    borderWidth: 0,
+    padding: 18,
   },
   summaryTop: {
     flexDirection: 'row',
@@ -643,13 +693,34 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
   },
+  paperIconBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    borderWidth: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  paperEmptyBadge: {
+    width: 52,
+    height: 52,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  totoroParadeBottom: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 20,
+    marginBottom: 10,
+  },
   emptyCard: {
-    borderRadius: 20,
+    borderRadius: 24,
+    borderWidth: 0,
     padding: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderStyle: 'dashed',
     marginTop: 20,
   },
   emptyEmoji: {
@@ -666,8 +737,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   wishCard: {
-    borderRadius: 24,
-    padding: 16,
+    borderRadius: 22,
+    borderWidth: 0,
+    padding: 18,
   },
   wishHeader: {
     flexDirection: 'row',
@@ -760,12 +832,12 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   input: {
-    borderRadius: 14,
+    borderRadius: 16,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 12,
     fontSize: 14,
     fontWeight: '600',
-    borderWidth: 1,
+    borderWidth: 0,
   },
   chipsScroll: {
     marginTop: 4,

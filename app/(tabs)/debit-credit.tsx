@@ -7,12 +7,14 @@ import {
   TouchableOpacity,
   TextInput,
   Platform,
+  ImageBackground,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useFinancial, DebtItem } from '@/context/FinancialContext';
 import { ThemeHeader } from '@/components/ThemeHeader';
+import { TotoroSticker } from '@/components/TotoroStickers';
 import { SegmentedControl } from '@/components/SegmentedControl';
 import { AestheticModal } from '@/components/AestheticModal';
 
@@ -92,6 +94,12 @@ export default function DebitCreditScreen() {
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.bgPrimary }]} edges={['top']}>
+      <ImageBackground
+        source={require('@/assets/images/grid_paper.png')}
+        resizeMode="repeat"
+        style={styles.screenGridBg}
+        imageStyle={{ opacity: 0.65 }}
+      >
       {/* Header */}
       <ThemeHeader
         title="Debt & Credit"
@@ -138,9 +146,75 @@ export default function DebitCreditScreen() {
         contentContainerStyle={styles.scrollContent}
       >
         <View style={styles.listContainer}>
+          {/* Summary Banner Card */}
+          <View
+            style={[
+              {
+                backgroundColor: colors.bgCard,
+                borderColor: 'transparent',
+                borderWidth: 0,
+                borderRadius: 22,
+                padding: 18,
+                marginBottom: 14,
+                position: 'relative',
+                overflow: 'visible',
+                ...colors.cardShadow,
+              },
+            ]}
+          >
+            <TotoroSticker
+              type="borrow_lent"
+              size={54}
+              style={{ position: 'absolute', top: -20, right: 12, zIndex: 10 }}
+            />
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <View
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 14,
+                  borderWidth: 0,
+                  borderColor: 'transparent',
+                  backgroundColor: colors.bgSecondary,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Ionicons
+                  name={segment === 'borrowed' ? 'arrow-down-circle-outline' : 'arrow-up-circle-outline'}
+                  size={22}
+                  color={segment === 'borrowed' ? colors.danger : colors.primaryGreen}
+                />
+              </View>
+              <View>
+                <Text style={{ fontSize: 11, fontWeight: '600', color: colors.textMuted }}>
+                  {segment === 'borrowed' ? 'Total Outstanding Borrowed' : 'Total Outstanding Lent'}
+                </Text>
+                <Text style={{ fontSize: 18, fontWeight: '800', color: colors.textMain, marginTop: 2 }}>
+                  {currencySymbol} {(segment === 'borrowed' ? borrowedTotal : lentTotal).toLocaleString()}
+                </Text>
+              </View>
+            </View>
+          </View>
+
           {filteredDebts.length === 0 ? (
-            <View style={[styles.emptyCard, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft }]}>
-              <Text style={[styles.emptyTitle, { color: colors.textMain }]}>No {segment === 'borrowed' ? 'borrowed debts' : 'money lent'}!</Text>
+            <View
+              style={[
+                styles.emptyCard,
+                {
+                  backgroundColor: colors.bgCard,
+                  borderColor: 'transparent',
+                  borderRadius: 22,
+                  alignItems: 'center',
+                  paddingVertical: 24,
+                  ...colors.cardShadow,
+                },
+              ]}
+            >
+              <View style={{ alignItems: 'center', marginBottom: 4 }}>
+                <TotoroSticker type="borrow_lent" size={90} />
+              </View>
+              <Text style={[styles.emptyTitle, { color: colors.textMain, marginTop: 10 }]}>No {segment === 'borrowed' ? 'borrowed debts' : 'money lent'}</Text>
               <Text style={[styles.emptySub, { color: colors.textMuted }]}>
                 All balances are clear. Tap + above to add a new record.
               </Text>
@@ -160,9 +234,9 @@ export default function DebitCreditScreen() {
                     styles.debtCard,
                     {
                       backgroundColor: colors.bgCard,
-                      borderColor: colors.borderSoft,
-                      borderWidth: 1,
-                      ...colors.cardShadow,
+                      borderColor: 'transparent',
+                      borderRadius: 22,
+                        ...colors.cardShadow,
                     },
                   ]}
                 >
@@ -275,10 +349,22 @@ export default function DebitCreditScreen() {
               onPress={() => setDebtType('borrowed')}
               style={[
                 styles.typeOptionBtn,
-                { backgroundColor: debtType === 'borrowed' ? colors.primaryAccent : colors.bgSecondary },
+                {
+                  backgroundColor: debtType === 'borrowed' ? colors.primaryAccent : colors.bgSecondary,
+                  borderColor: 'transparent',
+                  borderWidth: 0,
+                },
               ]}
             >
-              <Text style={[styles.typeOptionText, { color: debtType === 'borrowed' ? (colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214')) : colors.textMuted }]}>
+              <Text
+                style={[
+                  styles.typeOptionText,
+                  {
+                    color: debtType === 'borrowed' ? (colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214')) : colors.textMuted,
+                    fontWeight: debtType === 'borrowed' ? '800' : '600',
+                  },
+                ]}
+              >
                 Money Borrowed 💰
               </Text>
             </TouchableOpacity>
@@ -286,10 +372,22 @@ export default function DebitCreditScreen() {
               onPress={() => setDebtType('lent')}
               style={[
                 styles.typeOptionBtn,
-                { backgroundColor: debtType === 'lent' ? colors.primaryGreen : colors.bgSecondary },
+                {
+                  backgroundColor: debtType === 'lent' ? colors.primaryAccent : colors.bgSecondary,
+                  borderColor: 'transparent',
+                  borderWidth: 0,
+                },
               ]}
             >
-              <Text style={[styles.typeOptionText, { color: debtType === 'lent' ? '#ffffff' : colors.textMuted }]}>
+              <Text
+                style={[
+                  styles.typeOptionText,
+                  {
+                    color: debtType === 'lent' ? (colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214')) : colors.textMuted,
+                    fontWeight: debtType === 'lent' ? '800' : '600',
+                  },
+                ]}
+              >
                 Money Lent 🤝
               </Text>
             </TouchableOpacity>
@@ -344,12 +442,9 @@ export default function DebitCreditScreen() {
                   style={[
                     styles.accountChip,
                     {
-                      backgroundColor: isSelected
-                        ? (debtType === 'lent' ? colors.primaryAccent : colors.primaryGreen)
-                        : colors.bgSecondary,
-                      borderColor: isSelected
-                        ? (debtType === 'lent' ? colors.borderAccent : colors.primaryGreen)
-                        : colors.borderSoft,
+                      backgroundColor: isSelected ? colors.primaryAccent : colors.bgSecondary,
+                      borderColor: 'transparent',
+                      borderWidth: 0,
                     },
                   ]}
                 >
@@ -359,8 +454,8 @@ export default function DebitCreditScreen() {
                       styles.accountChipText,
                       {
                         color: isSelected
-                          ? (debtType === 'lent' ? colors.textOnAccent : (theme === 'noir' ? '#121214' : '#ffffff'))
-                          : colors.textMain,
+                          ? (colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214'))
+                          : colors.textMuted,
                       },
                       isSelected && { fontWeight: '800' },
                     ]}
@@ -371,7 +466,7 @@ export default function DebitCreditScreen() {
               );
             })}
           </ScrollView>
-          <View style={[styles.sourceNoticeBox, { backgroundColor: debtType === 'lent' ? colors.dangerLight : colors.primaryGreenLight, borderColor: debtType === 'lent' ? '#f4aab9' : colors.primaryGreen }]}>
+          <View style={[styles.sourceNoticeBox, { backgroundColor: debtType === 'lent' ? colors.dangerLight : colors.primaryGreenLight, borderColor: 'transparent' }]}>
             <Ionicons
               name={debtType === 'lent' ? 'remove-circle' : 'add-circle'}
               size={15}
@@ -452,7 +547,7 @@ export default function DebitCreditScreen() {
               <View style={styles.debtDetailRow}>
                 <Text style={[styles.debtDetailLabel, { color: colors.textMuted }]}>Reason / Note:</Text>
                 <Text style={[styles.debtDetailValue, { color: colors.textMain }]} numberOfLines={2}>
-                  "{selectedDebt.reason}"
+                  &ldquo;{selectedDebt.reason}&rdquo;
                 </Text>
               </View>
             ) : null}
@@ -497,17 +592,21 @@ export default function DebitCreditScreen() {
                   onPress={() => setRepayAccount(acc.name)}
                   style={[
                     styles.miniChip,
-                    { backgroundColor: repayAccount === acc.name ? colors.primaryGreen : colors.bgCard },
+                    {
+                      backgroundColor: repayAccount === acc.name ? colors.primaryAccent : colors.bgSecondary,
+                      borderColor: 'transparent',
+                      borderWidth: 0,
+                    },
                   ]}
                 >
-                  <Text style={[styles.miniChipText, { color: repayAccount === acc.name ? '#ffffff' : colors.textMuted }]}>
+                  <Text style={[styles.miniChipText, { color: repayAccount === acc.name ? (colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214')) : colors.textMuted, fontWeight: repayAccount === acc.name ? '800' : '600' }]}>
                     {acc.emoji} {acc.name}
                   </Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
 
-            <View style={[styles.sourceNoticeBox, { backgroundColor: selectedDebt.type === 'lent' ? colors.primaryGreenLight : colors.dangerLight, borderColor: selectedDebt.type === 'lent' ? colors.primaryGreen : '#f4aab9', marginTop: 8 }]}>
+            <View style={[styles.sourceNoticeBox, { backgroundColor: selectedDebt.type === 'lent' ? colors.primaryGreenLight : colors.dangerLight, borderColor: 'transparent', marginTop: 8 }]}>
               <Ionicons
                 name={selectedDebt.type === 'lent' ? 'add-circle' : 'remove-circle'}
                 size={14}
@@ -547,11 +646,17 @@ export default function DebitCreditScreen() {
           </View>
         )}
       </AestheticModal>
+          </ImageBackground>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  screenGridBg: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+  },
   safeArea: {
     flex: 1,
   },
@@ -575,13 +680,26 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     gap: 14,
   },
+  paperEmptyBadge: {
+    width: 52,
+    height: 52,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  totoroParadeBottom: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 20,
+    marginBottom: 10,
+  },
   emptyCard: {
-    borderRadius: 20,
+    borderRadius: 24,
+    borderWidth: 0,
     padding: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderStyle: 'dashed',
     marginTop: 20,
   },
   emptyEmoji: {
@@ -598,8 +716,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   debtCard: {
-    borderRadius: 24,
-    padding: 16,
+    borderRadius: 22,
+    borderWidth: 0,
+    padding: 18,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -695,12 +814,12 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   input: {
-    borderRadius: 14,
+    borderRadius: 16,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 12,
     fontSize: 14,
     fontWeight: '600',
-    borderWidth: 1,
+    borderWidth: 0,
   },
   typeSelectorRow: {
     flexDirection: 'row',
@@ -743,9 +862,9 @@ const styles = StyleSheet.create({
   },
   // Repay modal styles
   repayFormCard: {
-    padding: 14,
-    borderRadius: 18,
-    borderWidth: 1,
+    padding: 16,
+    borderRadius: 20,
+    borderWidth: 0,
     marginBottom: 16,
   },
   repayFormTitle: {
@@ -760,12 +879,12 @@ const styles = StyleSheet.create({
   },
   repayInput: {
     flex: 1,
-    borderRadius: 12,
+    borderRadius: 14,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 10,
     fontSize: 14,
     fontWeight: '600',
-    borderWidth: 1,
+    borderWidth: 0,
   },
   repaySubmitBtn: {
     paddingHorizontal: 20,
@@ -841,8 +960,8 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 12,
-    borderWidth: 1,
+    borderRadius: 14,
+    borderWidth: 0,
     marginRight: 8,
   },
   accountChipText: {
@@ -853,9 +972,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    padding: 10,
-    borderRadius: 12,
-    borderWidth: 1,
+    padding: 12,
+    borderRadius: 16,
+    borderWidth: 0,
     marginTop: 8,
   },
   sourceNoticeText: {
@@ -865,9 +984,9 @@ const styles = StyleSheet.create({
     lineHeight: 15,
   },
   debtLoanDetailsBox: {
-    padding: 12,
-    borderRadius: 14,
-    borderWidth: 1,
+    padding: 14,
+    borderRadius: 18,
+    borderWidth: 0,
     gap: 6,
     marginBottom: 12,
   },

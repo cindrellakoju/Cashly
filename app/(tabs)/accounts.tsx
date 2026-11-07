@@ -8,15 +8,18 @@ import {
   TextInput,
   Platform,
   Alert,
+  ImageBackground,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useFinancial, TransactionType } from '@/context/FinancialContext';
 import { ThemeHeader } from '@/components/ThemeHeader';
+import { TotoroSticker } from '@/components/TotoroStickers';
 import { SegmentedControl } from '@/components/SegmentedControl';
 import { AdminPinModal } from '@/components/AdminPinModal';
 import { AestheticModal } from '@/components/AestheticModal';
+
 
 type AccountSegment = 'balances' | 'transfers' | 'transactions';
 
@@ -281,17 +284,35 @@ export default function AccountsScreen() {
   if (!isVaultUnlocked) {
     return (
       <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.bgPrimary }]} edges={['top']}>
+      <ImageBackground
+        source={require('@/assets/images/grid_paper.png')}
+        resizeMode="repeat"
+        style={styles.screenGridBg}
+        imageStyle={{ opacity: 0.65 }}
+      >
         <ThemeHeader
           title="Account Vault 🔒"
           subtitle="Protected banking & portfolio records"
           stickerKey="vault"
         />
         <View style={styles.lockedContainer}>
-          <View style={[styles.lockedCard, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft, borderWidth: 1, ...colors.cardShadow }]}>
-            <View style={[styles.lockedIconWrapper, { backgroundColor: colors.primaryAccentLight }]}>
-              <Text style={{ fontSize: 44 }}>🔒</Text>
+          <View
+            style={[
+              styles.lockedCard,
+              {
+                backgroundColor: colors.bgCard,
+                borderRadius: 24,
+                ...colors.cardShadow,
+              },
+            ]}
+          >
+            <View style={{ alignItems: 'center', marginBottom: 6 }}>
+              <TotoroSticker type="vault" size={96} />
+              <View style={[styles.paperLockBadge, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft, marginTop: -14 }]}>
+                <Ionicons name="lock-closed-outline" size={22} color={colors.textMain} />
+              </View>
             </View>
-            <Text style={[styles.lockedTitle, { color: colors.textMain }]}>Account Vault Locked</Text>
+            <Text style={[styles.lockedTitle, { color: colors.textMain, marginTop: 12 }]}>Account Vault Locked</Text>
             <Text style={[styles.lockedSubtitle, { color: colors.textMuted }]}>
               Biometric & 4-Digit PIN encryption active. Enter your Account PIN to access balances and transactions.
             </Text>
@@ -301,11 +322,19 @@ export default function AccountsScreen() {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                 setIsAccountPinModalOpen(true);
               }}
-              style={[styles.unlockButton, { backgroundColor: colors.primaryAccent }]}
+              style={[
+                styles.unlockButton,
+                {
+                  backgroundColor: colors.primaryAccent,
+                  borderRadius: 10,
+                  borderWidth: 0,
+                  ...colors.cardShadow,
+                },
+              ]}
             >
               <Ionicons name="key" size={18} color={colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214')} />
               <Text style={[styles.unlockButtonText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}>
-                Unlock Account Vault 🔑
+                Unlock Account Vault
               </Text>
             </TouchableOpacity>
           </View>
@@ -324,12 +353,19 @@ export default function AccountsScreen() {
           pinType="account"
           onVerify={verifyAccountPin}
         />
+      </ImageBackground>
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.bgPrimary }]} edges={['top']}>
+      <ImageBackground
+        source={require('@/assets/images/grid_paper.png')}
+        resizeMode="repeat"
+        style={styles.screenGridBg}
+        imageStyle={{ opacity: 0.65 }}
+      >
       {/* Header with Lock Vault button */}
       <ThemeHeader
         title="Account Manager 🏦"
@@ -372,13 +408,28 @@ export default function AccountsScreen() {
         {activeSegment === 'balances' && (
           <View style={styles.container}>
             {/* Total Net Worth Card */}
-            <View style={[styles.netWorthCard, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft, borderWidth: 1, ...colors.cardShadow }]}>
-              <View style={styles.netWorthHeader}>
-                <View>
-                  <Text style={[styles.netWorthLabel, { color: colors.textMuted }]}>Total Net Worth</Text>
-                  <Text style={[styles.netWorthValue, { color: colors.textMain }]} numberOfLines={1} adjustsFontSizeToFit>
-                    {isPrivacyMasked ? `${currencySymbol} ••••••••` : `${currencySymbol} ${totalNetWorth.toLocaleString()}`}
-                  </Text>
+            <View
+              style={[
+                styles.netWorthCard,
+                {
+                  backgroundColor: colors.bgCard,
+                  borderRadius: 24,
+                ...colors.cardShadow,
+                },
+              ]}
+            >
+              <TotoroSticker type="savings" size={48} style={{ position: 'absolute', top: -16, right: 14, zIndex: 10 }} />
+                <View style={styles.netWorthHeader}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <View style={[styles.paperIconBadge, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
+                    <Ionicons name="wallet-outline" size={18} color={colors.textMain} />
+                  </View>
+                  <View>
+                    <Text style={[styles.netWorthLabel, { color: colors.textMuted }]}>Total Net Worth</Text>
+                    <Text style={[styles.netWorthValue, { color: colors.textMain }]} numberOfLines={1} adjustsFontSizeToFit>
+                      {isPrivacyMasked ? `${currencySymbol} ••••••••` : `${currencySymbol} ${totalNetWorth.toLocaleString()}`}
+                    </Text>
+                  </View>
                 </View>
 
                 <TouchableOpacity
@@ -395,9 +446,9 @@ export default function AccountsScreen() {
             </View>
 
             {/* Accounts Table List */}
-            <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft, borderWidth: 1, ...colors.cardShadow }]}>
+            <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, ...colors.cardShadow }]}>
               <View style={styles.sectionHeaderRow}>
-                <Text style={[styles.sectionTitle, { color: colors.textMain }]}>Accounts & Wallets 💼</Text>
+                <Text style={[styles.sectionTitle, { color: colors.textMain }]}>Accounts & Wallets</Text>
                 <TouchableOpacity
                   onPress={() => setIsAccountModalOpen(true)}
                   style={[styles.smallAddBtn, { backgroundColor: colors.primaryAccentLight }]}
@@ -510,7 +561,7 @@ export default function AccountsScreen() {
           <View style={styles.container}>
             {/* Header Action Row */}
             <View style={styles.subviewHeaderRow}>
-              <View style={[styles.searchBox, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft, borderWidth: 1, ...colors.cardShadow }]}>
+              <View style={[styles.searchBox, { backgroundColor: colors.bgCard, ...colors.cardShadow }]}>
                 <Ionicons name="search" size={16} color={colors.textSubtle} />
                 <TextInput
                   style={[styles.searchInput, { color: colors.textMain }]}
@@ -530,7 +581,7 @@ export default function AccountsScreen() {
             </View>
 
             {/* Transfers List */}
-            <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft, borderWidth: 1, ...colors.cardShadow }]}>
+            <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, ...colors.cardShadow }]}>
               <Text style={[styles.sectionTitle, { color: colors.textMain, marginBottom: 12 }]}>
                 Transfer Flow History 🔄
               </Text>
@@ -571,7 +622,7 @@ export default function AccountsScreen() {
           <View style={styles.container}>
             {/* Search & Add Action Row */}
             <View style={styles.subviewHeaderRow}>
-              <View style={[styles.searchBox, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft, borderWidth: 1, ...colors.cardShadow }]}>
+              <View style={[styles.searchBox, { backgroundColor: colors.bgCard, ...colors.cardShadow }]}>
                 <Ionicons name="search" size={16} color={colors.textSubtle} />
                 <TextInput
                   style={[styles.searchInput, { color: colors.textMain }]}
@@ -648,7 +699,7 @@ export default function AccountsScreen() {
                         {
                           backgroundColor: colors.bgCard,
                           borderColor: colors.borderSoft,
-                          borderWidth: 1,
+                          borderWidth: 0,
                           ...colors.cardShadow,
                         },
                       ]}
@@ -707,7 +758,7 @@ export default function AccountsScreen() {
         icon="💵"
       >
         <View style={{ paddingVertical: 4 }}>
-          <View style={{ backgroundColor: colors.bgSecondary, padding: 12, borderRadius: 14, marginBottom: 14, borderWidth: 1, borderColor: colors.borderSoft }}>
+          <View style={{ backgroundColor: colors.bgSecondary, padding: 12, borderRadius: 14, marginBottom: 14,  }}>
             <Text style={{ fontSize: 12, color: colors.textMuted, lineHeight: 18 }}>
               💡 <Text style={{ fontWeight: '800', color: colors.textMain }}>Opening Balance:</Text> Initial money sets your physical cash starting balance. It does NOT count as incoming income and will not be recorded in transactions.
             </Text>
@@ -740,7 +791,7 @@ export default function AccountsScreen() {
             <TouchableOpacity
               activeOpacity={0.8}
               onPress={() => setIsInitialCashModalOpen(false)}
-              style={[styles.submitButton, { flex: 1, backgroundColor: colors.bgSecondary, borderWidth: 1, borderColor: colors.borderSoft }]}
+              style={[styles.submitButton, { flex: 1, backgroundColor: colors.bgSecondary,  }]}
             >
               <Text style={[styles.submitButtonText, { color: colors.textMain }]}>Cancel</Text>
             </TouchableOpacity>
@@ -754,9 +805,9 @@ export default function AccountsScreen() {
                 await setCashInHandInitialMoney(num);
                 setIsInitialCashModalOpen(false);
               }}
-              style={[styles.submitButton, { flex: 1.5, backgroundColor: colors.primaryGreen }]}
+              style={[styles.submitButton, { flex: 1.5, backgroundColor: colors.primaryAccent }]}
             >
-              <Text style={[styles.submitButtonText, { color: '#ffffff' }]}>Save Initial Money 💵</Text>
+              <Text style={[styles.submitButtonText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}>Save Initial Money 💵</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -879,40 +930,70 @@ export default function AccountsScreen() {
         <View style={styles.formGroup}>
           <Text style={[styles.inputLabel, { color: colors.textMain }]}>From Account</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
-            {accounts.map((acc) => (
-              <TouchableOpacity
-                key={acc.id}
-                onPress={() => setTransFrom(acc.name)}
-                style={[
-                  styles.choiceChip,
-                  { backgroundColor: transFrom === acc.name ? colors.primaryAccent : colors.bgSecondary },
-                ]}
-              >
-                <Text style={[styles.choiceChipText, { color: transFrom === acc.name ? (colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214')) : colors.textMuted }]}>
-                  {acc.emoji} {acc.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
+            {accounts.map((acc) => {
+              const isSelected = transFrom === acc.name;
+              return (
+                <TouchableOpacity
+                  key={acc.id}
+                  onPress={() => setTransFrom(acc.name)}
+                  style={[
+                    styles.choiceChip,
+                    {
+                      backgroundColor: isSelected ? colors.primaryAccent : colors.bgSecondary,
+                      borderColor: isSelected ? colors.primaryAccent : colors.borderSoft,
+                      borderWidth: 0,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.choiceChipText,
+                      {
+                        color: isSelected ? (colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214')) : colors.textMuted,
+                        fontWeight: isSelected ? '800' : '600',
+                      },
+                    ]}
+                  >
+                    {acc.emoji} {acc.name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </ScrollView>
         </View>
 
         <View style={styles.formGroup}>
           <Text style={[styles.inputLabel, { color: colors.textMain }]}>To Destination Account</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
-            {accounts.map((acc) => (
-              <TouchableOpacity
-                key={acc.id}
-                onPress={() => setTransTo(acc.name)}
-                style={[
-                  styles.choiceChip,
-                  { backgroundColor: transTo === acc.name ? colors.primaryGreen : colors.bgSecondary },
-                ]}
-              >
-                <Text style={[styles.choiceChipText, { color: transTo === acc.name ? (theme === 'noir' ? '#121214' : '#ffffff') : colors.textMuted }]}>
-                  {acc.emoji} {acc.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
+            {accounts.map((acc) => {
+              const isSelected = transTo === acc.name;
+              return (
+                <TouchableOpacity
+                  key={acc.id}
+                  onPress={() => setTransTo(acc.name)}
+                  style={[
+                    styles.choiceChip,
+                    {
+                      backgroundColor: isSelected ? colors.primaryAccent : colors.bgSecondary,
+                      borderColor: isSelected ? colors.primaryAccent : colors.borderSoft,
+                      borderWidth: 0,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.choiceChipText,
+                      {
+                        color: isSelected ? (colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214')) : colors.textMuted,
+                        fontWeight: isSelected ? '800' : '600',
+                      },
+                    ]}
+                  >
+                    {acc.emoji} {acc.name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </ScrollView>
         </View>
 
@@ -1056,11 +1137,17 @@ export default function AccountsScreen() {
         pinType="account"
         onVerify={verifyAccountPin}
       />
+          </ImageBackground>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  screenGridBg: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+  },
   safeArea: {
     flex: 1,
   },
@@ -1073,7 +1160,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
-    borderWidth: 1,
+    borderWidth: 0,
     gap: 4,
   },
   lockVaultText: {
@@ -1086,7 +1173,8 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   netWorthCard: {
-    borderRadius: 24,
+    borderRadius: 20,
+    borderWidth: 0,
     padding: 18,
     overflow: 'hidden',
   },
@@ -1115,7 +1203,8 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   sectionCard: {
-    borderRadius: 24,
+    borderRadius: 20,
+    borderWidth: 0,
     padding: 18,
     overflow: 'hidden',
   },
@@ -1279,7 +1368,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 16,
-    borderWidth: 1,
+    borderWidth: 0,
     marginRight: 8,
   },
   filterPillText: {
@@ -1355,8 +1444,7 @@ const styles = StyleSheet.create({
     padding: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderStyle: 'dashed',
+    borderWidth: 0,
     marginTop: 20,
   },
   emptyEmoji: {
@@ -1387,7 +1475,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 14,
     fontWeight: '600',
-    borderWidth: 1,
+    borderWidth: 0,
   },
   chipsScroll: {
     marginTop: 4,
@@ -1431,9 +1519,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 40,
   },
+  paperLockBadge: {
+    width: 52,
+    height: 52,
+    borderRadius: 10,
+    borderWidth: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  paperIconBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    borderWidth: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  totoroParadeBottom: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 20,
+    marginBottom: 10,
+  },
   lockedCard: {
     width: '100%',
-    borderRadius: 24,
+    borderRadius: 20,
+    borderWidth: 0,
     padding: 24,
     alignItems: 'center',
   },
@@ -1476,7 +1588,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 12,
     borderRadius: 14,
-    borderWidth: 1,
+    borderWidth: 0,
     marginBottom: 14,
   },
   salaryToggleTitle: {
@@ -1492,7 +1604,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 8,
-    borderWidth: 1,
+    borderWidth: 0,
   },
   salaryBadgeText: {
     fontSize: 10,

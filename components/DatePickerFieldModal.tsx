@@ -185,7 +185,7 @@ export const DatePickerFieldModal: React.FC<DatePickerFieldModalProps> = ({
         <TouchableOpacity
           onPress={() => handleSelectPreset('yesterday')}
           activeOpacity={0.7}
-          style={[styles.presetChip, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft, borderWidth: 1 }]}
+          style={[styles.presetChip, { backgroundColor: colors.bgSecondary, borderColor: 'transparent', borderWidth: 0 }]}
         >
           <Text style={[styles.presetChipText, { color: colors.textMain }]}>Yesterday ⏪</Text>
         </TouchableOpacity>
@@ -193,14 +193,14 @@ export const DatePickerFieldModal: React.FC<DatePickerFieldModalProps> = ({
         <TouchableOpacity
           onPress={() => handleSelectPreset('firstOfMonth')}
           activeOpacity={0.7}
-          style={[styles.presetChip, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft, borderWidth: 1 }]}
+          style={[styles.presetChip, { backgroundColor: colors.bgSecondary, borderColor: 'transparent', borderWidth: 0 }]}
         >
           <Text style={[styles.presetChipText, { color: colors.textMain }]}>1st of Month 🗓️</Text>
         </TouchableOpacity>
       </View>
 
       {/* Month Navigation */}
-      <View style={[styles.calendarHeader, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
+      <View style={[styles.calendarHeader, { backgroundColor: colors.bgSecondary, borderColor: 'transparent' }]}>
         <TouchableOpacity
           onPress={handlePrevMonth}
           activeOpacity={0.7}
@@ -280,7 +280,7 @@ export const DatePickerFieldModal: React.FC<DatePickerFieldModalProps> = ({
                       : isToday
                       ? colors.primaryAccent
                       : 'transparent',
-                    borderWidth: isToday || isSelected ? 1.5 : 0,
+                    borderWidth: 0,
                   },
                 ]}
               >
@@ -314,7 +314,7 @@ export const DatePickerFieldModal: React.FC<DatePickerFieldModalProps> = ({
       </View>
 
       {/* Selected Date Summary & Confirm Bar */}
-      <View style={[styles.footerBar, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
+      <View style={[styles.footerBar, { backgroundColor: colors.bgSecondary, borderColor: 'transparent' }]}>
         <View style={styles.footerInfo}>
           <Text style={[styles.footerLabel, { color: colors.textMuted }]}>Selected</Text>
           <Text style={[styles.footerValue, { color: colors.textMain }]}>
@@ -367,7 +367,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 16,
-    borderWidth: 1,
+    borderWidth: 0,
     marginBottom: 12,
   },
   navArrowBtn: {
@@ -434,7 +434,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 16,
-    borderWidth: 1,
+    borderWidth: 0,
     marginTop: 4,
     marginBottom: 8,
   },

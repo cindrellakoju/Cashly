@@ -128,7 +128,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    borderWidth: 1,
+    borderWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -147,10 +147,10 @@ const styles = StyleSheet.create({
     paddingRight: 10,
   },
   chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
     borderRadius: 18,
-    borderWidth: 1,
+    borderWidth: 0,
   },
   chipText: {
     fontSize: 11,

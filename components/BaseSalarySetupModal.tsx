@@ -10,11 +10,13 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  ImageBackground,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useFinancial } from '@/context/FinancialContext';
 import { sendVerificationEmail } from '@/services/emailService';
+import { TotoroSticker } from '@/components/TotoroStickers';
 
 interface BaseSalarySetupModalProps {
   visible: boolean;
@@ -301,6 +303,12 @@ export const BaseSalarySetupModal: React.FC<BaseSalarySetupModalProps> = ({
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
     >
       <View style={[styles.backdrop, { backgroundColor: colors.bgPrimary }]}>
+        <ImageBackground
+          source={require('@/assets/images/grid_paper.png')}
+          resizeMode="repeat"
+          style={StyleSheet.absoluteFill}
+          imageStyle={{ opacity: 0.65 }}
+        />
         {forceConfigureStep && (
           <TouchableWithoutFeedback onPress={onClose}>
             <View style={styles.backdropDismissArea} />
@@ -312,11 +320,20 @@ export const BaseSalarySetupModal: React.FC<BaseSalarySetupModalProps> = ({
             styles.modalCard,
             {
               backgroundColor: colors.bgCard,
-              borderColor: colors.borderSoft,
+              borderColor: 'transparent',
+              borderWidth: 0,
+              borderRadius: 24,
+              position: 'relative',
+              overflow: 'visible',
               ...colors.cardShadow,
             },
           ]}
         >
+          <TotoroSticker
+            type="savings"
+            size={64}
+            style={{ position: 'absolute', top: -28, right: 18, zIndex: 10 }}
+          />
             {step === 'ask' ? (
               /* ==================== STEP 1: ASK USER ==================== */
               <ScrollView
@@ -435,9 +452,9 @@ export const BaseSalarySetupModal: React.FC<BaseSalarySetupModalProps> = ({
                 </View>
 
                 {/* Note Box */}
-                <View style={[styles.noteBox, { backgroundColor: '#fdebef', borderColor: '#f4aab9' }]}>
-                  <Ionicons name="information-circle" size={18} color="#d85c72" style={{ marginTop: 2 }} />
-                  <Text style={[styles.noteText, { color: '#2c352d' }]}>
+                <View style={[styles.noteBox, { backgroundColor: colors.primaryAccentLight, borderColor: colors.borderAccent }]}>
+                  <Ionicons name="information-circle" size={18} color={colors.primaryAccent} style={{ marginTop: 2 }} />
+                  <Text style={[styles.noteText, { color: colors.textMain }]}>
                     <Text style={{ fontWeight: '800' }}>Note:</Text> Base salary will be added automatically on your selected date into your Income log
                   </Text>
                 </View>
@@ -474,7 +491,7 @@ export const BaseSalarySetupModal: React.FC<BaseSalarySetupModalProps> = ({
                           Set monthly amount & payday date
                         </Text>
                       </View>
-                      <Ionicons name="arrow-forward" size={18} color="#2c352d" />
+                      <Ionicons name="arrow-forward" size={18} color={colors.textOnAccent} />
                     </TouchableOpacity>
 
                     {/* No - Half Width */}
@@ -554,8 +571,8 @@ export const BaseSalarySetupModal: React.FC<BaseSalarySetupModalProps> = ({
                     style={[
                       styles.salaryStatusBanner,
                       {
-                        backgroundColor: isSalaryLoaded ? colors.primaryGreenLight : '#fff9e6',
-                        borderColor: isSalaryLoaded ? colors.primaryGreen : '#ffd43b',
+                        backgroundColor: isSalaryLoaded ? colors.primaryGreenLight : colors.warningLight,
+                        borderColor: isSalaryLoaded ? colors.primaryGreen : colors.warning,
                       },
                     ]}
                   >
@@ -565,7 +582,7 @@ export const BaseSalarySetupModal: React.FC<BaseSalarySetupModalProps> = ({
                         <Text
                           style={[
                             styles.statusBannerTitle,
-                            { color: isSalaryLoaded ? colors.primaryGreen : '#856404' },
+                            { color: isSalaryLoaded ? colors.primaryGreen : colors.warning },
                           ]}
                         >
                           {isSalaryLoaded
@@ -575,7 +592,7 @@ export const BaseSalarySetupModal: React.FC<BaseSalarySetupModalProps> = ({
                         <Text
                           style={[
                             styles.statusBannerSub,
-                            { color: isSalaryLoaded ? colors.textMain : '#664d03' },
+                            { color: isSalaryLoaded ? colors.textMain : colors.textMuted },
                           ]}
                         >
                           {isSalaryLoaded
@@ -595,7 +612,7 @@ export const BaseSalarySetupModal: React.FC<BaseSalarySetupModalProps> = ({
                         }}
                         style={[styles.loadNowBtn, { backgroundColor: colors.primaryAccent }]}
                       >
-                        <Ionicons name="flash" size={15} color="#2c352d" />
+                        <Ionicons name="flash" size={15} color={colors.textOnAccent} />
                         <Text style={styles.loadNowBtnText}>Load Salary to Bank Now (Early)</Text>
                       </TouchableOpacity>
                     )}
@@ -604,9 +621,9 @@ export const BaseSalarySetupModal: React.FC<BaseSalarySetupModalProps> = ({
 
                 {/* Error Message if any */}
                 {errorMsg ? (
-                  <View style={[styles.errorBox, { backgroundColor: '#ffe4e6', borderColor: '#e6536b' }]}>
-                    <Ionicons name="alert-circle" size={16} color="#e6536b" />
-                    <Text style={styles.errorText}>{errorMsg}</Text>
+                  <View style={[styles.errorBox, { backgroundColor: colors.dangerLight, borderColor: colors.danger }]}>
+                    <Ionicons name="alert-circle" size={16} color={colors.danger} />
+                    <Text style={[styles.errorText, { color: colors.danger }]}>{errorMsg}</Text>
                   </View>
                 ) : null}
 
@@ -850,7 +867,7 @@ export const BaseSalarySetupModal: React.FC<BaseSalarySetupModalProps> = ({
                               : isCodeSent
                                 ? colors.bgSecondary
                                 : colors.primaryAccent,
-                          borderWidth: isCodeSent ? 1 : 0,
+                          borderWidth: 0,
                           borderColor: colors.primaryGreen,
                         },
                       ]}
@@ -938,7 +955,7 @@ export const BaseSalarySetupModal: React.FC<BaseSalarySetupModalProps> = ({
                           <Text
                             style={[
                               styles.submitButtonText,
-                              { color: isVerifying || enteredOtp.length < 6 ? colors.textMuted : '#2c352d' },
+                              { color: isVerifying || enteredOtp.length < 6 ? colors.textMuted : colors.textOnAccent },
                             ]}
                           >
                             {isVerifying ? 'Verifying…' : 'Verify Code ✓'}
@@ -1017,7 +1034,7 @@ const styles = StyleSheet.create({
     maxWidth: 380,
     maxHeight: '90%',
     borderRadius: 24,
-    borderWidth: 1,
+    borderWidth: 0,
     padding: 20,
   },
   scrollStep: {
@@ -1057,7 +1074,7 @@ const styles = StyleSheet.create({
   iconHeroBox: {
     padding: 16,
     borderRadius: 18,
-    borderWidth: 1,
+    borderWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
@@ -1072,9 +1089,9 @@ const styles = StyleSheet.create({
   },
   noteBox: {
     flexDirection: 'row',
-    padding: 12,
-    borderRadius: 14,
-    borderWidth: 1,
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 0,
     gap: 8,
     alignItems: 'flex-start',
   },
@@ -1113,7 +1130,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 14,
     borderRadius: 16,
-    borderWidth: 1,
+    borderWidth: 0,
     gap: 12,
   },
   secondaryChoiceEmoji: {
@@ -1138,9 +1155,9 @@ const styles = StyleSheet.create({
   amountInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: 14,
-    paddingHorizontal: 12,
+    borderWidth: 0,
+    borderRadius: 16,
+    paddingHorizontal: 14,
   },
   currencyPrefix: {
     fontSize: 15,
@@ -1174,8 +1191,8 @@ const styles = StyleSheet.create({
   dayGridCell: {
     width: 36,
     height: 36,
-    borderRadius: 10,
-    borderWidth: 1,
+    borderRadius: 12,
+    borderWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1187,9 +1204,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    padding: 10,
-    borderRadius: 12,
-    borderWidth: 1,
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 0,
     marginTop: 6,
   },
   previewText: {
@@ -1200,9 +1217,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    padding: 10,
-    borderRadius: 12,
-    borderWidth: 1,
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 0,
   },
   errorText: {
     color: '#e6536b',
@@ -1225,20 +1242,20 @@ const styles = StyleSheet.create({
     color: '#2c352d',
   },
   backBtn: {
-    paddingVertical: 9,
+    paddingVertical: 10,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
+    borderWidth: 0,
   },
   backBtnText: {
     fontSize: 13,
     fontWeight: '600',
   },
   salaryStatusBanner: {
-    padding: 12,
-    borderRadius: 16,
-    borderWidth: 1,
+    padding: 14,
+    borderRadius: 18,
+    borderWidth: 0,
     gap: 8,
   },
   statusBannerTitle: {
@@ -1267,9 +1284,9 @@ const styles = StyleSheet.create({
     color: '#2c352d',
   },
   metricPickerCard: {
-    padding: 12,
-    borderRadius: 16,
-    borderWidth: 1,
+    padding: 14,
+    borderRadius: 18,
+    borderWidth: 0,
     gap: 8,
   },
   metricPickerHeader: {
@@ -1290,10 +1307,10 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   currencyChip: {
-    paddingHorizontal: 11,
-    paddingVertical: 6,
-    borderRadius: 10,
-    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1303,9 +1320,9 @@ const styles = StyleSheet.create({
   customCurrencyInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 10,
+    borderWidth: 0,
+    borderRadius: 12,
+    paddingHorizontal: 12,
     paddingVertical: 4,
     gap: 8,
     marginTop: 4,
@@ -1321,9 +1338,9 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   securityInfoCard: {
-    padding: 14,
-    borderRadius: 16,
-    borderWidth: 1,
+    padding: 16,
+    borderRadius: 18,
+    borderWidth: 0,
   },
   securityIconRow: {
     flexDirection: 'row',
@@ -1349,9 +1366,9 @@ const styles = StyleSheet.create({
   emailInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
+    borderWidth: 0,
     borderRadius: 14,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     height: 46,
   },
   emailInput: {
