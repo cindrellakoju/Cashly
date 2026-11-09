@@ -24,7 +24,9 @@ export async function sendPinRecoveryEmail(params: {
   // Custom override from .env
   const customUrl = process.env.EXPO_PUBLIC_EMAIL_API_URL;
   if (customUrl && customUrl.trim()) {
-    endpoints.push(customUrl.trim());
+    const cleanUrl = customUrl.trim();
+    const baseUrl = cleanUrl.replace(/\/send-pin\/?$/, '').replace(/\/send-verification\/?$/, '').replace(/\/$/, '');
+    endpoints.push(`${baseUrl}/send-pin`);
   }
 
   // Web environment
@@ -135,8 +137,9 @@ export async function sendVerificationEmail(params: {
 
   const customUrl = process.env.EXPO_PUBLIC_EMAIL_API_URL;
   if (customUrl && customUrl.trim()) {
-    // Replace /send-pin suffix with /send-verification if present
-    endpoints.push(customUrl.trim().replace(/\/send-pin$/, '/send-verification'));
+    const cleanUrl = customUrl.trim();
+    const baseUrl = cleanUrl.replace(/\/send-pin\/?$/, '').replace(/\/send-verification\/?$/, '').replace(/\/$/, '');
+    endpoints.push(`${baseUrl}/send-verification`);
   }
 
   if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.origin) {
