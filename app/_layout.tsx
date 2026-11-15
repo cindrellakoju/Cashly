@@ -1,3 +1,4 @@
+import '@/constants/textConfig';
 import React, { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';

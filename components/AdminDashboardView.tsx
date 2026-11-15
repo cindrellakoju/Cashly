@@ -2977,7 +2977,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
-    paddingBottom: Platform.OS === 'ios' ? 44 : 36,
+    paddingBottom: 44,
     gap: 16,
   },
   adminBanner: {

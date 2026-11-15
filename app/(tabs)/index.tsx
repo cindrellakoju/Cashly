@@ -831,346 +831,354 @@ export default function HomeScreen() {
                 <View style={styles.metricsGrid}>
                   {hasBaseSalary ? (
                     <>
-                      {/* Card 1: Base Salary */}
-                      <TouchableOpacity
-                        activeOpacity={0.8}
-                        onPress={() => {
-                          setIsSalaryModalOpen(true);
-                        }}
-                        style={[
-                          styles.metricCard,
-                          {
-                            backgroundColor: colors.bgCard,
-                            borderColor: colors.borderSoft,
-                            ...colors.cardShadow,
-                          },
-                        ]}
-                      >
-                        <TotoroSticker type="big" size={64} style={styles.cardCornerSticker} />
-                        <View style={styles.metricHeaderRow}>
-                          <View style={[styles.paperIconBadge, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
-                            <Ionicons name="wallet-outline" size={15} color={colors.textMain} />
-                          </View>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                            {isSalaryLoaded ? (
-                              <View style={[styles.badgePill, { backgroundColor: colors.primaryGreenLight, borderColor: colors.primaryGreenLight }]}>
-                                <Text style={[styles.badgePillText, { color: colors.primaryGreen }]}>Loaded</Text>
-                              </View>
-                            ) : (
-                              <View style={[styles.badgePill, { backgroundColor: colors.warningLight, borderColor: colors.warningLight }]}>
-                                <Text style={[styles.badgePillText, { color: colors.warning }]}>
-                                  {daysUntilPayday === 1 ? 'Tomorrow' : 'In ' + daysUntilPayday + 'd'}
-                                </Text>
-                              </View>
-                            )}
-                            <Ionicons name="pencil" size={11} color={colors.textSubtle} />
-                          </View>
-                        </View>
-                        <Text style={[styles.metricLabel, { color: colors.textMuted }]}>
-                          {selectedMonth === 'ALL' ? 'Base Salary' : 'Base Salary'}
-                        </Text>
-                        <Text style={[styles.metricValue, { color: colors.textMain }]} numberOfLines={1} adjustsFontSizeToFit>
-                          {currencySymbol} {activeMonthSalary.toLocaleString()}
-                        </Text>
-                        <Text
-                          style={{
-                            fontSize: 10,
-                            fontWeight: '500',
-                            marginTop: 3,
-                            color: isSalaryLoaded || selectedMonth === 'ALL' ? colors.primaryGreen : colors.textSubtle,
+                      <View style={styles.metricsRow}>
+                        {/* Card 1: Base Salary */}
+                        <TouchableOpacity
+                          activeOpacity={0.8}
+                          onPress={() => {
+                            setIsSalaryModalOpen(true);
                           }}
-                          numberOfLines={1}
+                          style={[
+                            styles.metricCard,
+                            {
+                              backgroundColor: colors.bgCard,
+                              borderColor: colors.borderSoft,
+                              ...colors.cardShadow,
+                            },
+                          ]}
                         >
-                          {selectedMonth === 'ALL'
-                            ? 'Across all months'
-                            : isSalaryLoaded
-                              ? ('In ' + (accounts.find((a) => a.id === salaryAccountId)?.name || 'Cash in Hand'))
-                              : ('Due on ' + baseSalaryDate + 'th')}
-                        </Text>
-                      </TouchableOpacity>
+                          <TotoroSticker type="big" size={52} style={styles.cardCornerSticker} />
+                          <View style={styles.metricHeaderRow}>
+                            <View style={[styles.paperIconBadge, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
+                              <Ionicons name="wallet-outline" size={15} color={colors.textMain} />
+                            </View>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                              {isSalaryLoaded ? (
+                                <View style={[styles.badgePill, { backgroundColor: colors.primaryGreenLight, borderColor: colors.primaryGreenLight }]}>
+                                  <Text style={[styles.badgePillText, { color: colors.primaryGreen }]}>Loaded</Text>
+                                </View>
+                              ) : (
+                                <View style={[styles.badgePill, { backgroundColor: colors.warningLight, borderColor: colors.warningLight }]}>
+                                  <Text style={[styles.badgePillText, { color: colors.warning }]}>
+                                    {daysUntilPayday === 1 ? 'Tomorrow' : 'In ' + daysUntilPayday + 'd'}
+                                  </Text>
+                                </View>
+                              )}
+                              <Ionicons name="pencil" size={11} color={colors.textSubtle} />
+                            </View>
+                          </View>
+                          <Text style={[styles.metricLabel, { color: colors.textMuted }]}>
+                            {selectedMonth === 'ALL' ? 'Base Salary' : 'Base Salary'}
+                          </Text>
+                          <Text style={[styles.metricValue, { color: colors.textMain }]} numberOfLines={1} adjustsFontSizeToFit>
+                            {currencySymbol} {activeMonthSalary.toLocaleString()}
+                          </Text>
+                          <Text
+                            style={{
+                              fontSize: 10,
+                              fontWeight: '500',
+                              marginTop: 3,
+                              color: isSalaryLoaded || selectedMonth === 'ALL' ? colors.primaryGreen : colors.textSubtle,
+                            }}
+                            numberOfLines={1}
+                          >
+                            {selectedMonth === 'ALL'
+                              ? 'Across all months'
+                              : isSalaryLoaded
+                                ? ('In ' + (accounts.find((a) => a.id === salaryAccountId)?.name || 'Cash in Hand'))
+                                : ('Due on ' + baseSalaryDate + 'th')}
+                          </Text>
+                        </TouchableOpacity>
 
-                      {/* Card 2: Spent */}
-                      <View
-                        style={[
-                          styles.metricCard,
-                          {
-                            backgroundColor: colors.bgCard,
-                            borderColor: colors.borderSoft,
-                            ...colors.cardShadow,
-                          },
-                        ]}
-                      >
-                        <TotoroSticker type="spent" size={62} style={[styles.cardCornerSticker, { right: 4 }]} />
-                        <View style={styles.metricHeaderRow}>
-                          <View style={[styles.paperIconBadge, { backgroundColor: colors.dangerLight, borderColor: colors.dangerLight }]}>
-                            <Ionicons name="arrow-up-circle-outline" size={15} color={colors.danger} />
+                        {/* Card 2: Spent */}
+                        <View
+                          style={[
+                            styles.metricCard,
+                            {
+                              backgroundColor: colors.bgCard,
+                              borderColor: colors.borderSoft,
+                              ...colors.cardShadow,
+                            },
+                          ]}
+                        >
+                          <TotoroSticker type="spent" size={52} style={[styles.cardCornerSticker, { right: 4 }]} />
+                          <View style={styles.metricHeaderRow}>
+                            <View style={[styles.paperIconBadge, { backgroundColor: colors.dangerLight, borderColor: colors.dangerLight }]}>
+                              <Ionicons name="arrow-up-circle-outline" size={15} color={colors.danger} />
+                            </View>
+                            <View style={[styles.badgePill, { backgroundColor: colors.dangerLight, borderColor: colors.dangerLight }]}>
+                              <Text style={[styles.badgePillText, { color: colors.danger }]}>Spent</Text>
+                            </View>
                           </View>
-                          <View style={[styles.badgePill, { backgroundColor: colors.dangerLight, borderColor: colors.dangerLight }]}>
-                            <Text style={[styles.badgePillText, { color: colors.danger }]}>Spent</Text>
-                          </View>
+                          <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Total Spent</Text>
+                          <Text style={[styles.metricValue, { color: colors.danger }]} numberOfLines={1} adjustsFontSizeToFit>
+                            {currencySymbol} {totalSpent.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                          </Text>
                         </View>
-                        <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Total Spent</Text>
-                        <Text style={[styles.metricValue, { color: colors.danger }]} numberOfLines={1} adjustsFontSizeToFit>
-                          {currencySymbol} {totalSpent.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
-                        </Text>
                       </View>
 
-                      {/* Card 3: Total Income */}
-                      <TouchableOpacity
-                        activeOpacity={0.8}
-                        onPress={() => {
-                          setIncDate(getTodayDateStr());
-                          setIncAmount('');
-                          setIncNote('');
-                          setIsIncomeModalOpen(true);
-                        }}
-                        style={[
-                          styles.metricCard,
-                          {
-                            backgroundColor: colors.bgCard,
-                            borderColor: colors.borderSoft,
-                            ...colors.cardShadow,
-                          },
-                        ]}
-                      >
-                        <TotoroSticker type="leaf" size={62} style={styles.cardCornerSticker} />
-                        <View style={styles.metricHeaderRow}>
-                          <View style={[styles.paperIconBadge, { backgroundColor: colors.primaryGreenLight, borderColor: colors.primaryGreenLight }]}>
-                            <Ionicons name="arrow-down-circle-outline" size={15} color={colors.primaryGreen} />
-                          </View>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-                            <View style={[styles.badgePill, { backgroundColor: colors.primaryGreenLight, borderColor: colors.primaryGreenLight }]}>
-                              <Text style={[styles.badgePillText, { color: colors.primaryGreen }]}>Inflow</Text>
-                            </View>
-                            <Ionicons name="add" size={13} color={colors.primaryGreen} />
-                          </View>
-                        </View>
-                        <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Total Income</Text>
-                        <Text style={[styles.metricValue, { color: colors.primaryGreen }]} numberOfLines={1} adjustsFontSizeToFit>
-                          {currencySymbol} {totalIncome.toLocaleString()}
-                        </Text>
-                      </TouchableOpacity>
-
-                      {/* Card 4: Total Net Worth */}
-                      <TouchableOpacity
-                        activeOpacity={0.8}
-                        onPress={() => router.push('/(tabs)/accounts')}
-                        style={[
-                          styles.metricCard,
-                          {
-                            backgroundColor: colors.bgCard,
-                            borderColor: colors.borderSoft,
-                            ...colors.cardShadow,
-                          },
-                        ]}
-                      >
-                        <TotoroSticker type="savings" size={62} style={[styles.cardCornerSticker, { right: 2 }]} />
-                        <View style={styles.metricHeaderRow}>
-                          <View style={[styles.paperIconBadge, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
-                            <Ionicons name="briefcase-outline" size={15} color={colors.textMain} />
-                          </View>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                            <TouchableOpacity
-                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                              onPress={(e) => {
-                                e?.stopPropagation?.();
-                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                togglePrivacyMask();
-                              }}
-                              style={[
-                                styles.badgePill,
-                                {
-                                  backgroundColor: colors.bgSecondary,
-                                  borderColor: colors.borderSoft,
-                                  paddingHorizontal: 6,
-                                  paddingVertical: 3,
-                                },
-                              ]}
-                            >
-                              <Ionicons
-                                name={isPrivacyMasked ? 'eye-off-outline' : 'eye-outline'}
-                                size={12}
-                                color={colors.textMain}
-                              />
-                            </TouchableOpacity>
-                            <View style={[styles.badgePill, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
-                              <Text style={[styles.badgePillText, { color: colors.textMain }]}>Vault</Text>
-                            </View>
-                          </View>
-                        </View>
-                        <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Total Net Worth</Text>
-                        <Text style={[styles.metricValue, { color: colors.textMain }]} numberOfLines={1} adjustsFontSizeToFit>
-                          {isPrivacyMasked
-                            ? `${currencySymbol} ••••••`
-                            : `${currencySymbol} ${totalNetWorth.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`}
-                        </Text>
-                        <Text
-                          style={{
-                            fontSize: 10,
-                            fontWeight: '500',
-                            marginTop: 3,
-                            color: colors.primaryGreen,
+                      <View style={styles.metricsRow}>
+                        {/* Card 3: Total Income */}
+                        <TouchableOpacity
+                          activeOpacity={0.8}
+                          onPress={() => {
+                            setIncDate(getTodayDateStr());
+                            setIncAmount('');
+                            setIncNote('');
+                            setIsIncomeModalOpen(true);
                           }}
-                          numberOfLines={1}
+                          style={[
+                            styles.metricCard,
+                            {
+                              backgroundColor: colors.bgCard,
+                              borderColor: colors.borderSoft,
+                              ...colors.cardShadow,
+                            },
+                          ]}
                         >
-                          All Accounts
-                        </Text>
-                      </TouchableOpacity>
+                          <TotoroSticker type="leaf" size={52} style={styles.cardCornerSticker} />
+                          <View style={styles.metricHeaderRow}>
+                            <View style={[styles.paperIconBadge, { backgroundColor: colors.primaryGreenLight, borderColor: colors.primaryGreenLight }]}>
+                              <Ionicons name="arrow-down-circle-outline" size={15} color={colors.primaryGreen} />
+                            </View>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                              <View style={[styles.badgePill, { backgroundColor: colors.primaryGreenLight, borderColor: colors.primaryGreenLight }]}>
+                                <Text style={[styles.badgePillText, { color: colors.primaryGreen }]}>Inflow</Text>
+                              </View>
+                              <Ionicons name="add" size={13} color={colors.primaryGreen} />
+                            </View>
+                          </View>
+                          <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Total Income</Text>
+                          <Text style={[styles.metricValue, { color: colors.primaryGreen }]} numberOfLines={1} adjustsFontSizeToFit>
+                            {currencySymbol} {totalIncome.toLocaleString()}
+                          </Text>
+                        </TouchableOpacity>
+
+                        {/* Card 4: Total Net Worth */}
+                        <TouchableOpacity
+                          activeOpacity={0.8}
+                          onPress={() => router.push('/(tabs)/accounts')}
+                          style={[
+                            styles.metricCard,
+                            {
+                              backgroundColor: colors.bgCard,
+                              borderColor: colors.borderSoft,
+                              ...colors.cardShadow,
+                            },
+                          ]}
+                        >
+                          <TotoroSticker type="savings" size={52} style={[styles.cardCornerSticker, { right: 2 }]} />
+                          <View style={styles.metricHeaderRow}>
+                            <View style={[styles.paperIconBadge, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
+                              <Ionicons name="briefcase-outline" size={15} color={colors.textMain} />
+                            </View>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                              <TouchableOpacity
+                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                onPress={(e) => {
+                                  e?.stopPropagation?.();
+                                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                  togglePrivacyMask();
+                                }}
+                                style={[
+                                  styles.badgePill,
+                                  {
+                                    backgroundColor: colors.bgSecondary,
+                                    borderColor: colors.borderSoft,
+                                    paddingHorizontal: 6,
+                                    paddingVertical: 3,
+                                  },
+                                ]}
+                              >
+                                <Ionicons
+                                  name={isPrivacyMasked ? 'eye-off-outline' : 'eye-outline'}
+                                  size={12}
+                                  color={colors.textMain}
+                                />
+                              </TouchableOpacity>
+                              <View style={[styles.badgePill, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
+                                <Text style={[styles.badgePillText, { color: colors.textMain }]}>Vault</Text>
+                              </View>
+                            </View>
+                          </View>
+                          <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Total Net Worth</Text>
+                          <Text style={[styles.metricValue, { color: colors.textMain }]} numberOfLines={1} adjustsFontSizeToFit>
+                            {isPrivacyMasked
+                              ? `${currencySymbol} ••••••`
+                              : `${currencySymbol} ${totalNetWorth.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`}
+                          </Text>
+                          <Text
+                            style={{
+                              fontSize: 10,
+                              fontWeight: '500',
+                              marginTop: 3,
+                              color: colors.primaryGreen,
+                            }}
+                            numberOfLines={1}
+                          >
+                            All Accounts
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
                     </>
                   ) : (
                     <>
-                      {/* Card 1: Total Income */}
-                      <TouchableOpacity
-                        activeOpacity={0.8}
-                        onPress={() => {
-                          setIncDate(getTodayDateStr());
-                          setIncAmount('');
-                          setIncNote('');
-                          setIsIncomeModalOpen(true);
-                        }}
-                        style={[
-                          styles.metricCard,
-                          {
-                            backgroundColor: colors.bgCard,
-                            borderColor: colors.borderSoft,
-                            ...colors.cardShadow,
-                          },
-                        ]}
-                      >
-                        <TotoroSticker type="leaf" size={62} style={styles.cardCornerSticker} />
-                        <View style={styles.metricHeaderRow}>
-                          <View style={[styles.paperIconBadge, { backgroundColor: colors.primaryGreenLight, borderColor: colors.primaryGreenLight }]}>
-                            <Ionicons name="arrow-down-circle-outline" size={15} color={colors.primaryGreen} />
-                          </View>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-                            <View style={[styles.badgePill, { backgroundColor: colors.primaryGreenLight, borderColor: colors.primaryGreenLight }]}>
-                              <Text style={[styles.badgePillText, { color: colors.primaryGreen }]}>Inflow</Text>
+                      <View style={styles.metricsRow}>
+                        {/* Card 1: Total Income */}
+                        <TouchableOpacity
+                          activeOpacity={0.8}
+                          onPress={() => {
+                            setIncDate(getTodayDateStr());
+                            setIncAmount('');
+                            setIncNote('');
+                            setIsIncomeModalOpen(true);
+                          }}
+                          style={[
+                            styles.metricCard,
+                            {
+                              backgroundColor: colors.bgCard,
+                              borderColor: colors.borderSoft,
+                              ...colors.cardShadow,
+                            },
+                          ]}
+                        >
+                          <TotoroSticker type="leaf" size={52} style={styles.cardCornerSticker} />
+                          <View style={styles.metricHeaderRow}>
+                            <View style={[styles.paperIconBadge, { backgroundColor: colors.primaryGreenLight, borderColor: colors.primaryGreenLight }]}>
+                              <Ionicons name="arrow-down-circle-outline" size={15} color={colors.primaryGreen} />
                             </View>
-                            <Ionicons name="add" size={13} color={colors.primaryGreen} />
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                              <View style={[styles.badgePill, { backgroundColor: colors.primaryGreenLight, borderColor: colors.primaryGreenLight }]}>
+                                <Text style={[styles.badgePillText, { color: colors.primaryGreen }]}>Inflow</Text>
+                              </View>
+                              <Ionicons name="add" size={13} color={colors.primaryGreen} />
+                            </View>
                           </View>
-                        </View>
-                        <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Total Income</Text>
-                        <Text style={[styles.metricValue, { color: colors.primaryGreen }]} numberOfLines={1} adjustsFontSizeToFit>
-                          {currencySymbol} {totalIncome.toLocaleString()}
-                        </Text>
-                      </TouchableOpacity>
+                          <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Total Income</Text>
+                          <Text style={[styles.metricValue, { color: colors.primaryGreen }]} numberOfLines={1} adjustsFontSizeToFit>
+                            {currencySymbol} {totalIncome.toLocaleString()}
+                          </Text>
+                        </TouchableOpacity>
 
-                      {/* Card 2: Spent */}
-                      <View
-                        style={[
-                          styles.metricCard,
-                          {
-                            backgroundColor: colors.bgCard,
-                            borderColor: colors.borderSoft,
-                            ...colors.cardShadow,
-                          },
-                        ]}
-                      >
-                        <TotoroSticker type="spent" size={62} style={[styles.cardCornerSticker, { right: 4 }]} />
-                        <View style={styles.metricHeaderRow}>
-                          <View style={[styles.paperIconBadge, { backgroundColor: colors.dangerLight, borderColor: colors.dangerLight }]}>
-                            <Ionicons name="arrow-up-circle-outline" size={15} color={colors.danger} />
+                        {/* Card 2: Spent */}
+                        <View
+                          style={[
+                            styles.metricCard,
+                            {
+                              backgroundColor: colors.bgCard,
+                              borderColor: colors.borderSoft,
+                              ...colors.cardShadow,
+                            },
+                          ]}
+                        >
+                          <TotoroSticker type="spent" size={52} style={[styles.cardCornerSticker, { right: 4 }]} />
+                          <View style={styles.metricHeaderRow}>
+                            <View style={[styles.paperIconBadge, { backgroundColor: colors.dangerLight, borderColor: colors.dangerLight }]}>
+                              <Ionicons name="arrow-up-circle-outline" size={15} color={colors.danger} />
+                            </View>
+                            <View style={[styles.badgePill, { backgroundColor: colors.dangerLight, borderColor: colors.dangerLight }]}>
+                              <Text style={[styles.badgePillText, { color: colors.danger }]}>Spent</Text>
+                            </View>
                           </View>
-                          <View style={[styles.badgePill, { backgroundColor: colors.dangerLight, borderColor: colors.dangerLight }]}>
-                            <Text style={[styles.badgePillText, { color: colors.danger }]}>Spent</Text>
-                          </View>
+                          <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Total Spent</Text>
+                          <Text style={[styles.metricValue, { color: colors.danger }]} numberOfLines={1} adjustsFontSizeToFit>
+                            {currencySymbol} {totalSpent.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                          </Text>
                         </View>
-                        <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Total Spent</Text>
-                        <Text style={[styles.metricValue, { color: colors.danger }]} numberOfLines={1} adjustsFontSizeToFit>
-                          {currencySymbol} {totalSpent.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
-                        </Text>
                       </View>
 
-                      {/* Card 3: Total Net Worth */}
-                      <TouchableOpacity
-                        activeOpacity={0.8}
-                        onPress={() => router.push('/(tabs)/accounts')}
-                        style={[
-                          styles.metricCard,
-                          {
-                            backgroundColor: colors.bgCard,
-                            borderColor: colors.borderSoft,
-                            ...colors.cardShadow,
-                          },
-                        ]}
-                      >
-                        <TotoroSticker type="big" size={64} style={[styles.cardCornerSticker, { right: 2 }]} />
-                        <View style={styles.metricHeaderRow}>
-                          <View style={[styles.paperIconBadge, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
-                            <Ionicons name="briefcase-outline" size={15} color={colors.textMain} />
-                          </View>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                            <TouchableOpacity
-                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                              onPress={(e) => {
-                                e?.stopPropagation?.();
-                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                togglePrivacyMask();
-                              }}
-                              style={[
-                                styles.badgePill,
-                                {
-                                  backgroundColor: colors.bgSecondary,
-                                  borderColor: colors.borderSoft,
-                                  paddingHorizontal: 6,
-                                  paddingVertical: 3,
-                                },
-                              ]}
-                            >
-                              <Ionicons
-                                name={isPrivacyMasked ? 'eye-off-outline' : 'eye-outline'}
-                                size={12}
-                                color={colors.textMain}
-                              />
-                            </TouchableOpacity>
-                            <View style={[styles.badgePill, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
-                              <Text style={[styles.badgePillText, { color: colors.textMain }]}>Vault</Text>
+                      <View style={styles.metricsRow}>
+                        {/* Card 3: Total Net Worth */}
+                        <TouchableOpacity
+                          activeOpacity={0.8}
+                          onPress={() => router.push('/(tabs)/accounts')}
+                          style={[
+                            styles.metricCard,
+                            {
+                              backgroundColor: colors.bgCard,
+                              borderColor: colors.borderSoft,
+                              ...colors.cardShadow,
+                            },
+                          ]}
+                        >
+                          <TotoroSticker type="big" size={52} style={[styles.cardCornerSticker, { right: 2 }]} />
+                          <View style={styles.metricHeaderRow}>
+                            <View style={[styles.paperIconBadge, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
+                              <Ionicons name="briefcase-outline" size={15} color={colors.textMain} />
+                            </View>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                              <TouchableOpacity
+                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                onPress={(e) => {
+                                  e?.stopPropagation?.();
+                                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                  togglePrivacyMask();
+                                }}
+                                style={[
+                                  styles.badgePill,
+                                  {
+                                    backgroundColor: colors.bgSecondary,
+                                    borderColor: colors.borderSoft,
+                                    paddingHorizontal: 6,
+                                    paddingVertical: 3,
+                                  },
+                                ]}
+                              >
+                                <Ionicons
+                                  name={isPrivacyMasked ? 'eye-off-outline' : 'eye-outline'}
+                                  size={12}
+                                  color={colors.textMain}
+                                />
+                              </TouchableOpacity>
+                              <View style={[styles.badgePill, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
+                                <Text style={[styles.badgePillText, { color: colors.textMain }]}>Vault</Text>
+                              </View>
                             </View>
                           </View>
-                        </View>
-                        <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Total Net Worth</Text>
-                        <Text style={[styles.metricValue, { color: colors.textMain }]} numberOfLines={1} adjustsFontSizeToFit>
-                          {isPrivacyMasked
-                            ? `${currencySymbol} ••••••`
-                            : `${currencySymbol} ${totalNetWorth.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`}
-                        </Text>
-                        <Text
-                          style={{
-                            fontSize: 10,
-                            fontWeight: '500',
-                            marginTop: 3,
-                            color: colors.primaryGreen,
-                          }}
-                          numberOfLines={1}
-                        >
-                          All Accounts
-                        </Text>
-                      </TouchableOpacity>
+                          <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Total Net Worth</Text>
+                          <Text style={[styles.metricValue, { color: colors.textMain }]} numberOfLines={1} adjustsFontSizeToFit>
+                            {isPrivacyMasked
+                              ? `${currencySymbol} ••••••`
+                              : `${currencySymbol} ${totalNetWorth.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`}
+                          </Text>
+                          <Text
+                            style={{
+                              fontSize: 10,
+                              fontWeight: '500',
+                              marginTop: 3,
+                              color: colors.primaryGreen,
+                            }}
+                            numberOfLines={1}
+                          >
+                            All Accounts
+                          </Text>
+                        </TouchableOpacity>
 
-                      {/* Card 4: Savings Rate */}
-                      <View
-                        style={[
-                          styles.metricCard,
-                          {
-                            backgroundColor: colors.bgCard,
-                            borderColor: colors.borderSoft,
-                            ...colors.cardShadow,
-                          },
-                        ]}
-                      >
-                        <TotoroSticker type="curious" size={42} style={styles.cardCornerSticker} />
-                        <View style={styles.metricHeaderRow}>
-                          <View style={[styles.paperIconBadge, { backgroundColor: colors.primaryGreenLight, borderColor: colors.primaryGreenLight }]}>
-                            <Ionicons name="trending-up-outline" size={15} color={colors.primaryGreen} />
+                        {/* Card 4: Savings Rate */}
+                        <View
+                          style={[
+                            styles.metricCard,
+                            {
+                              backgroundColor: colors.bgCard,
+                              borderColor: colors.borderSoft,
+                              ...colors.cardShadow,
+                            },
+                          ]}
+                        >
+                          <TotoroSticker type="curious" size={42} style={styles.cardCornerSticker} />
+                          <View style={styles.metricHeaderRow}>
+                            <View style={[styles.paperIconBadge, { backgroundColor: colors.primaryGreenLight, borderColor: colors.primaryGreenLight }]}>
+                              <Ionicons name="trending-up-outline" size={15} color={colors.primaryGreen} />
+                            </View>
+                            <View style={[styles.badgePill, { backgroundColor: colors.primaryGreenLight, borderColor: colors.primaryGreenLight }]}>
+                              <Text style={[styles.badgePillText, { color: colors.primaryGreen }]}>Rate</Text>
+                            </View>
                           </View>
-                          <View style={[styles.badgePill, { backgroundColor: colors.primaryGreenLight, borderColor: colors.primaryGreenLight }]}>
-                            <Text style={[styles.badgePillText, { color: colors.primaryGreen }]}>Rate</Text>
-                          </View>
+                          <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Savings Ratio</Text>
+                          <Text style={[styles.metricValue, { color: colors.primaryGreen }]} numberOfLines={1} adjustsFontSizeToFit>
+                            {totalIncome > 0 ? Math.max(0, Math.round(((totalIncome - totalSpent) / totalIncome) * 100)) + '%' : '0%'}
+                          </Text>
                         </View>
-                        <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Savings Ratio</Text>
-                        <Text style={[styles.metricValue, { color: colors.primaryGreen }]} numberOfLines={1} adjustsFontSizeToFit>
-                          {totalIncome > 0 ? Math.max(0, Math.round(((totalIncome - totalSpent) / totalIncome) * 100)) + '%' : '0%'}
-                        </Text>
                       </View>
                     </>
                   )}
@@ -2703,7 +2711,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    paddingBottom: Platform.OS === 'ios' ? 120 : 95,
+    paddingBottom: 110,
   },
   viewContainer: {
     paddingHorizontal: 20,
@@ -2729,10 +2737,13 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   metricsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
     gap: 10,
+    width: '100%',
+  },
+  metricsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    width: '100%',
   },
   paperIconBadge: {
     width: 32,
@@ -2747,11 +2758,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   metricCard: {
-    width: (width - 40 - 10) / 2,
+    flex: 1,
     borderRadius: 20,
     borderWidth: 0,
-    padding: 14,
-    minHeight: 126,
+    padding: 12,
+    minHeight: 120,
     position: 'relative',
     overflow: 'visible',
   },
@@ -2780,7 +2791,7 @@ const styles = StyleSheet.create({
   metricValue: {
     fontSize: 16,
     fontWeight: '800',
-    maxWidth: '72%',
+    maxWidth: '85%',
   },
   actionButtonsRow: {
     flexDirection: 'row',

@@ -806,7 +806,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: Platform.OS === 'ios' ? 100 : 80,
+    paddingBottom: 110,
   },
   headerAddBtn: {
     width: 38,

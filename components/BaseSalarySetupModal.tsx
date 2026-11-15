@@ -302,7 +302,7 @@ export const BaseSalarySetupModal: React.FC<BaseSalarySetupModalProps> = ({
 
   const modalContent = (
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       style={styles.keyboardAvoidingView}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
     >

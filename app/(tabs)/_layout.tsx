@@ -1,6 +1,7 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
 import { Platform, View, StyleSheet, ImageBackground } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFinancial } from '@/context/FinancialContext';
 import { HapticTab } from '@/components/haptic-tab';
@@ -9,6 +10,10 @@ import { WelcomeSplashScreen } from '@/components/WelcomeSplashScreen';
 import { BackupManagerModal } from '@/components/BackupManagerModal';
 
 export default function TabLayout() {
+  const insets = useSafeAreaInsets();
+  const tabBottom = Math.max(insets.bottom, Platform.OS === 'ios' ? 24 : 10);
+  const tabHeight = 56 + tabBottom;
+
   const {
     colors,
     isAdminMode,
@@ -50,9 +55,9 @@ export default function TabLayout() {
               backgroundColor: colors.tabBarBg,
               borderTopColor: 'transparent',
               borderTopWidth: 0,
-              height: Platform.OS === 'ios' ? 88 : 64,
-              paddingBottom: Platform.OS === 'ios' ? 28 : 10,
-              paddingTop: 8,
+              height: tabHeight,
+              paddingBottom: tabBottom,
+              paddingTop: 6,
               shadowColor: '#28452D',
               shadowOffset: { width: 0, height: -4 },
               shadowOpacity: 0.08,

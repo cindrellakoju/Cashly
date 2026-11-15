@@ -256,7 +256,7 @@ export const EmailVerificationModal: React.FC<EmailVerificationModalProps> = ({
 
   const cardContent = (
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       style={styles.keyboardAvoidingView}
     >
       <View style={[styles.backdrop, { backgroundColor: colors.bgPrimary }]}>
