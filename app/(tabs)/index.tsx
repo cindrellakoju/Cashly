@@ -386,7 +386,8 @@ export default function HomeScreen() {
 
   // Handle Adding Income
   const handleAddIncomeSubmit = () => {
-    const num = parseFloat(incAmount);
+    const cleanNum = incAmount.replace(/[^0-9.]/g, '');
+    const num = parseFloat(cleanNum);
     if (isNaN(num) || num <= 0) return;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     const dateStr = incDate.trim() || getTodayDateStr();
@@ -403,7 +404,8 @@ export default function HomeScreen() {
   // Handle Adding Expense
   const handleAddExpenseSubmit = () => {
     Keyboard.dismiss();
-    const num = parseFloat(expAmount);
+    const cleanNum = expAmount.replace(/[^0-9.]/g, '');
+    const num = parseFloat(cleanNum);
     if (isNaN(num) || num <= 0) return;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     const dateStr = expDate.trim() || getTodayDateStr();
@@ -1858,12 +1860,12 @@ export default function HomeScreen() {
           icon="💸"
         >
           <View style={styles.formGroup}>
-            <Text style={[styles.inputLabel, { color: colors.textMain }]}>Amount ({currencySymbol})</Text>
+            <Text style={[styles.inputLabel, { color: colors.textMain }]}>Amount</Text>
             <TextInput
               style={[styles.input, { backgroundColor: colors.bgSecondary, color: colors.textMain, borderColor: colors.borderSoft }]}
-              placeholder="e.g. 250"
+              placeholder="Enter amount (e.g. 250)"
               placeholderTextColor={colors.textSubtle}
-              keyboardType="numeric"
+              keyboardType="default"
               value={expAmount}
               onChangeText={setExpAmount}
             />
@@ -2163,12 +2165,12 @@ export default function HomeScreen() {
           icon="💰"
         >
           <View style={styles.formGroup}>
-            <Text style={[styles.inputLabel, { color: colors.textMain }]}>Amount ({currencySymbol})</Text>
+            <Text style={[styles.inputLabel, { color: colors.textMain }]}>Amount</Text>
             <TextInput
               style={[styles.input, { backgroundColor: colors.bgSecondary, color: colors.textMain, borderColor: colors.borderSoft }]}
-              placeholder="e.g. 15000"
+              placeholder="Enter amount (e.g. 15000)"
               placeholderTextColor={colors.textSubtle}
-              keyboardType="numeric"
+              keyboardType="default"
               value={incAmount}
               onChangeText={setIncAmount}
             />
@@ -2782,14 +2784,16 @@ const styles = StyleSheet.create({
   },
   actionButtonsRow: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 8,
+    marginTop: -4,
+    marginBottom: -4,
   },
   primaryActionBtn: {
-    flex: 1.2,
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 13,
+    paddingVertical: 12,
     borderRadius: 16,
     borderWidth: 0,
     gap: 6,
@@ -2803,7 +2807,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 13,
+    paddingVertical: 12,
     borderRadius: 16,
     borderWidth: 0,
     gap: 6,
@@ -3050,7 +3054,7 @@ const styles = StyleSheet.create({
   },
   // Form styles
   formGroup: {
-    marginBottom: 16,
+    marginBottom: 12,
   },
   inputLabel: {
     fontSize: 13,

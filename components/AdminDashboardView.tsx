@@ -453,7 +453,7 @@ export const AdminDashboardView: React.FC = () => {
     setEditTitle('Create New Expense Record');
     setEditLabel1('Reason / Description');
     setEditField1('');
-    setEditLabel2(`Amount (${currencySymbol})`);
+    setEditLabel2('Amount');
     setEditField2('250');
     setEditLabel3('Category Tag');
     setEditField3(categories[0]?.name || '🍔 Food & Dining');
@@ -466,7 +466,7 @@ export const AdminDashboardView: React.FC = () => {
     setEditTitle(`Edit Expense: ${exp.reason}`);
     setEditLabel1('Reason / Note');
     setEditField1(exp.reason);
-    setEditLabel2(`Amount (${currencySymbol})`);
+    setEditLabel2('Amount');
     setEditField2(exp.amount.toString());
     setEditLabel3('Category Tag');
     setEditField3(exp.category);
@@ -482,7 +482,7 @@ export const AdminDashboardView: React.FC = () => {
     setEditTitle('Create New Income Record');
     setEditLabel1('Income Note / Source');
     setEditField1('');
-    setEditLabel2(`Amount (${currencySymbol})`);
+    setEditLabel2('Amount');
     setEditField2('5000');
     setEditLabel3('Stored Account');
     setEditField3(accounts[0]?.name || 'Bank Account');
@@ -495,7 +495,7 @@ export const AdminDashboardView: React.FC = () => {
     setEditTitle(`Edit Income: ${inc.note}`);
     setEditLabel1('Income Note / Source');
     setEditField1(inc.note);
-    setEditLabel2(`Amount (${currencySymbol})`);
+    setEditLabel2('Amount');
     setEditField2(inc.amount.toString());
     setEditLabel3('Stored Account');
     setEditField3(inc.stored);
@@ -661,7 +661,7 @@ export const AdminDashboardView: React.FC = () => {
   const handleSaveGenericEdit = async () => {
     if (!editingTarget) return;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    const numVal2 = parseFloat(editField2) || 0;
+    const numVal2 = parseFloat(String(editField2).replace(/[^0-9.]/g, '')) || 0;
     const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
     const recDate = editField4.trim() || today;
 
