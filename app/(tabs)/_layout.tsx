@@ -6,9 +6,20 @@ import { useFinancial } from '@/context/FinancialContext';
 import { HapticTab } from '@/components/haptic-tab';
 import { AdminDashboardView } from '@/components/AdminDashboardView';
 import { WelcomeSplashScreen } from '@/components/WelcomeSplashScreen';
+import { BackupManagerModal } from '@/components/BackupManagerModal';
 
 export default function TabLayout() {
-  const { colors, isAdminMode, hasCompletedOnboarding, isWelcomeActive, setIsWelcomeActive, isDbLoaded } = useFinancial();
+  const {
+    colors,
+    isAdminMode,
+    hasCompletedOnboarding,
+    isWelcomeActive,
+    setIsWelcomeActive,
+    isDbLoaded,
+    isBackupModalOpen,
+    backupModalMode,
+    closeBackupModal,
+  } = useFinancial();
 
   if (!isDbLoaded) {
     return null;
@@ -111,6 +122,15 @@ export default function TabLayout() {
           <View style={styles.welcomeOverlay}>
             <WelcomeSplashScreen onFinish={() => setIsWelcomeActive(false)} />
           </View>
+        )}
+
+        {/* Global Backup Manager Modal (Export/Import with OTP Verification) */}
+        {isBackupModalOpen && backupModalMode && (
+          <BackupManagerModal
+            visible={isBackupModalOpen}
+            mode={backupModalMode}
+            onClose={closeBackupModal}
+          />
         )}
       </ImageBackground>
     </View>

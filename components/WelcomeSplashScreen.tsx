@@ -11,6 +11,7 @@ import {
   ImageBackground,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import { Ionicons } from '@expo/vector-icons';
 import { useFinancial } from '@/context/FinancialContext';
 import { TotoroSticker } from '@/components/TotoroStickers';
 
@@ -25,7 +26,7 @@ export const WelcomeSplashScreen: React.FC<WelcomeSplashScreenProps> = ({
   onFinish,
   autoDismissDelay = 0,
 }) => {
-  const { colors, theme } = useFinancial();
+  const { colors, theme, openBackupModal } = useFinancial();
 
   // Theme-consistent colors
   const bgColor = colors.bgPrimary;
@@ -284,17 +285,8 @@ export const WelcomeSplashScreen: React.FC<WelcomeSplashScreenProps> = ({
             },
           ]}
         >
-          <View
-            style={[
-              styles.totoroBadgeWrapper,
-              {
-                backgroundColor: colors.bgCard,
-                borderColor: 'transparent',
-                ...colors.cardShadow,
-              },
-            ]}
-          >
-            <TotoroSticker type="app_icon" size={108} />
+          <View style={styles.totoroBadgeWrapper}>
+            <TotoroSticker type="app_icon" size={124} />
           </View>
         </Animated.View>
 
@@ -402,6 +394,28 @@ export const WelcomeSplashScreen: React.FC<WelcomeSplashScreenProps> = ({
           <Text style={[styles.bottomPromptText, { color: subtextColor }]}>
             tap anywhere to continue
           </Text>
+
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => {
+              onFinish();
+              setTimeout(() => openBackupModal('import'), 300);
+            }}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              paddingHorizontal: 12,
+              paddingVertical: 6,
+              borderRadius: 14,
+              backgroundColor: 'rgba(101, 168, 101, 0.12)',
+              marginTop: 10,
+            }}
+          >
+            <Ionicons name="download-outline" size={13} color={flourishColor} style={{ marginRight: 5 }} />
+            <Text style={{ fontSize: 11, fontWeight: '700', color: flourishColor, letterSpacing: 0.3 }}>
+              Restore from JSON Backup 📥
+            </Text>
+          </TouchableOpacity>
         </Animated.View>
       </TouchableOpacity>
     </Animated.View>
@@ -436,9 +450,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   totoroBadgeWrapper: {
-    borderRadius: 28,
+    backgroundColor: 'transparent',
     borderWidth: 0,
-    padding: 14,
+    padding: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },

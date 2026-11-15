@@ -85,7 +85,7 @@ export async function sendPinRecoveryEmail(params: {
       if (response.ok && data.success) {
         return {
           success: true,
-          message: data.message || 'Email sent successfully via Gmail SMTP!',
+          message: data.message || 'Email sent successfully!',
           recipient: recipientEmail,
         };
       }

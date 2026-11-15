@@ -17,6 +17,7 @@ import { ThemeHeader } from '@/components/ThemeHeader';
 import { TotoroSticker } from '@/components/TotoroStickers';
 import { SegmentedControl } from '@/components/SegmentedControl';
 import { AestheticModal } from '@/components/AestheticModal';
+import { CalendarPicker } from '@/components/DatePickerFieldModal';
 
 type DebtSegment = 'borrowed' | 'lent';
 
@@ -36,10 +37,18 @@ export default function DebitCreditScreen() {
   const [debtType, setDebtType] = useState<'borrowed' | 'lent'>('borrowed');
   const [debtReason, setDebtReason] = useState('');
   const [debtAccount, setDebtAccount] = useState(accounts[0]?.name || 'Cash');
+  const [debtDate, setDebtDate] = useState(
+    new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+  );
+  const [isDebtDatePickerOpen, setIsDebtDatePickerOpen] = useState(false);
 
   // Form states - Record Repayment
   const [repayAmount, setRepayAmount] = useState('');
   const [repayAccount, setRepayAccount] = useState(accounts[0]?.name || 'Cash');
+  const [repayDate, setRepayDate] = useState(
+    new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+  );
+  const [isRepayDatePickerOpen, setIsRepayDatePickerOpen] = useState(false);
 
   const filteredDebts = debts.filter((d) => d.type === segment);
 
@@ -58,10 +67,13 @@ export default function DebitCreditScreen() {
       type: debtType,
       reason: debtReason.trim(),
       account: chosenAcc,
+      date: debtDate.trim() || undefined,
     });
     setPersonName('');
     setTotalAmount('');
     setDebtReason('');
+    setDebtDate(new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }));
+    setIsDebtDatePickerOpen(false);
     setIsAddModalOpen(false);
   };
 
@@ -71,8 +83,10 @@ export default function DebitCreditScreen() {
     const amount = parseFloat(repayAmount);
     if (isNaN(amount) || amount <= 0) return;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    recordInstallment(selectedDebt.id, amount, repayAccount);
+    recordInstallment(selectedDebt.id, amount, repayAccount, repayDate);
     setRepayAmount('');
+    setRepayDate(new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }));
+    setIsRepayDatePickerOpen(false);
     setIsHistoryModalOpen(false);
     setSelectedDebt(null);
   };
@@ -81,6 +95,8 @@ export default function DebitCreditScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setSelectedDebt(debt);
     setRepayAccount(debt.account || accounts[0]?.name || 'Cash in Hand');
+    setRepayDate(new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }));
+    setIsRepayDatePickerOpen(false);
     setIsHistoryModalOpen(true);
   };
 
@@ -162,11 +178,7 @@ export default function DebitCreditScreen() {
               },
             ]}
           >
-            <TotoroSticker
-              type="borrow_lent"
-              size={54}
-              style={{ position: 'absolute', top: -20, right: 12, zIndex: 10 }}
-            />
+            
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
               <View
                 style={{
@@ -337,7 +349,10 @@ export default function DebitCreditScreen() {
       {/* ===================== MODAL: ADD DEBT ===================== */}
       <AestheticModal
         visible={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
+        onClose={() => {
+          setIsDebtDatePickerOpen(false);
+          setIsAddModalOpen(false);
+        }}
         title={debtType === 'borrowed' ? 'Add Borrowed Debt' : 'Add Money Lent'}
         subtitle="Log a new personal liability or credit"
         icon="💳"
@@ -415,6 +430,48 @@ export default function DebitCreditScreen() {
             value={debtReason}
             onChangeText={setDebtReason}
           />
+        </View>
+
+        {/* Date Field */}
+        <View style={styles.formGroup}>
+          <Text style={[styles.inputLabel, { color: colors.textMain }]}>Date Logged 📅</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <TextInput
+              style={[styles.input, { flex: 1, backgroundColor: colors.bgSecondary, color: colors.textMain, borderColor: colors.borderSoft }]}
+              placeholder="e.g. 15 Nov 2026"
+              placeholderTextColor={colors.textSubtle}
+              value={debtDate}
+              onChangeText={setDebtDate}
+            />
+            <TouchableOpacity
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setIsDebtDatePickerOpen((prev) => !prev);
+              }}
+              activeOpacity={0.7}
+              style={{
+                padding: 12,
+                borderRadius: 14,
+                backgroundColor: isDebtDatePickerOpen ? colors.primaryAccent : colors.bgSecondary,
+              }}
+            >
+              <Ionicons
+                name="calendar-outline"
+                size={20}
+                color={isDebtDatePickerOpen ? (colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214')) : colors.primaryAccent}
+              />
+            </TouchableOpacity>
+          </View>
+
+          {isDebtDatePickerOpen && (
+            <View style={{ marginTop: 10 }}>
+              <CalendarPicker
+                currentValue={debtDate}
+                onSelectDate={(formattedDate) => setDebtDate(formattedDate)}
+                onClose={() => setIsDebtDatePickerOpen(false)}
+              />
+            </View>
+          )}
         </View>
 
         {/* Source Account Picker */}
@@ -567,23 +624,93 @@ export default function DebitCreditScreen() {
           <View style={[styles.repayFormCard, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
             <Text style={[styles.repayFormTitle, { color: colors.textMain }]}>Record Repayment 💸</Text>
 
-            <View style={styles.repayInputRow}>
+            {/* Repayment Amount */}
+            <View style={{ marginBottom: 8 }}>
+              <Text style={[styles.inputSubLabel, { color: colors.textMuted, marginBottom: 4 }]}>
+                Repayment Amount ({currencySymbol}):
+              </Text>
               <TextInput
-                style={[styles.repayInput, { backgroundColor: colors.bgCard, color: colors.textMain, borderColor: colors.borderSoft }]}
-                placeholder={`Amount (${currencySymbol})`}
+                style={[
+                  styles.repayInput,
+                  {
+                    backgroundColor: colors.bgCard,
+                    color: colors.textMain,
+                    borderColor: colors.borderSoft,
+                    width: '100%',
+                  },
+                ]}
+                placeholder={`e.g. 5000`}
                 placeholderTextColor={colors.textSubtle}
                 keyboardType="numeric"
                 value={repayAmount}
                 onChangeText={setRepayAmount}
               />
-              <TouchableOpacity
-                onPress={handleRepaymentSubmit}
-                style={[styles.repaySubmitBtn, { backgroundColor: colors.primaryGreen }]}
-              >
-                <Text style={styles.repaySubmitText}>Pay</Text>
-              </TouchableOpacity>
             </View>
 
+            {/* Repayment Date Selection */}
+            <View style={{ marginBottom: 8 }}>
+              <Text style={[styles.inputSubLabel, { color: colors.textMuted, marginBottom: 4 }]}>
+                Repayment Date:
+              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <TextInput
+                  style={[
+                    styles.repayInput,
+                    {
+                      flex: 1,
+                      backgroundColor: colors.bgCard,
+                      color: colors.textMain,
+                      borderColor: colors.borderSoft,
+                    },
+                  ]}
+                  value={repayDate}
+                  onChangeText={setRepayDate}
+                  placeholder="e.g. 15 Nov 2026"
+                  placeholderTextColor={colors.textSubtle}
+                />
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setIsRepayDatePickerOpen(!isRepayDatePickerOpen);
+                  }}
+                  style={{
+                    paddingHorizontal: 12,
+                    paddingVertical: 10,
+                    borderRadius: 12,
+                    backgroundColor: isRepayDatePickerOpen ? colors.primaryAccent : colors.bgCard,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderWidth: 0,
+                  }}
+                >
+                  <Ionicons
+                    name="calendar-outline"
+                    size={18}
+                    color={
+                      isRepayDatePickerOpen
+                        ? (colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214'))
+                        : colors.primaryAccent
+                    }
+                  />
+                </TouchableOpacity>
+              </View>
+
+              {isRepayDatePickerOpen && (
+                <View style={{ marginTop: 8 }}>
+                  <CalendarPicker
+                    currentValue={repayDate}
+                    onSelectDate={(formattedDate) => {
+                      setRepayDate(formattedDate);
+                      setIsRepayDatePickerOpen(false);
+                    }}
+                    onClose={() => setIsRepayDatePickerOpen(false)}
+                  />
+                </View>
+              )}
+            </View>
+
+            {/* Payment Account */}
             <Text style={[styles.inputSubLabel, { color: colors.textMuted }]}>Payment Account:</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 4 }}>
               {accounts.map((acc) => (
@@ -593,7 +720,7 @@ export default function DebitCreditScreen() {
                   style={[
                     styles.miniChip,
                     {
-                      backgroundColor: repayAccount === acc.name ? colors.primaryAccent : colors.bgSecondary,
+                      backgroundColor: repayAccount === acc.name ? colors.primaryAccent : colors.bgCard,
                       borderColor: 'transparent',
                       borderWidth: 0,
                     },
@@ -618,6 +745,24 @@ export default function DebitCreditScreen() {
                   : `Repayment will be subtracted from ${repayAccount} balance & recorded in transactions`}
               </Text>
             </View>
+
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={handleRepaymentSubmit}
+              style={[
+                styles.submitButton,
+                {
+                  backgroundColor: colors.primaryGreen,
+                  marginTop: 10,
+                  paddingVertical: 12,
+                  borderRadius: 14,
+                },
+              ]}
+            >
+              <Text style={[styles.submitButtonText, { color: '#ffffff' }]}>
+                Record Repayment 💸
+              </Text>
+            </TouchableOpacity>
           </View>
         )}
 

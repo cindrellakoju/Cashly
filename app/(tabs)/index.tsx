@@ -10,18 +10,20 @@ import {
   Platform,
   Alert,
   ImageBackground,
+  Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { router } from 'expo-router';
 import { useFinancial, extractDayFromDate, getCurrentMonthKey } from '@/context/FinancialContext';
 import { ThemeHeader } from '@/components/ThemeHeader';
 import { TotoroSticker } from '@/components/TotoroStickers';
 import { SegmentedControl } from '@/components/SegmentedControl';
 import { AestheticModal } from '@/components/AestheticModal';
 import { AdminDashboardView as _AdminDashboardView } from '@/components/AdminDashboardView'; // kept for type safety, rendered in _layout
-import { DatePickerFieldModal } from '@/components/DatePickerFieldModal';
+import { CalendarPicker } from '@/components/DatePickerFieldModal';
 import { BaseSalarySetupModal } from '@/components/BaseSalarySetupModal';
 import { EmailVerificationModal } from '@/components/EmailVerificationModal';
 
@@ -60,6 +62,9 @@ export default function HomeScreen() {
     totalSpent,
     totalIncome,
     remainingBudget,
+    totalNetWorth,
+    isPrivacyMasked,
+    togglePrivacyMask,
     totalEnvelopesBudgeted,
     incomes,
     expenses,
@@ -220,6 +225,7 @@ export default function HomeScreen() {
   const [expAccount, setExpAccount] = useState(accounts[0]?.name || 'Cash in Hand');
   const [expDate, setExpDate] = useState(getTodayDateStr());
   const [expRecurringBillId, setExpRecurringBillId] = useState('');
+  const [expMode, setExpMode] = useState<'category' | 'bill'>('category');
 
   // Form states - Category Tag (General categorization)
   const [catName, setCatName] = useState('');
@@ -361,16 +367,20 @@ export default function HomeScreen() {
     setIncNote('');
     setIncAccount(accounts[0]?.name || 'Cash in Hand');
     setIncDate(getTodayDateStr());
+    setIsDatePickerOpen(false);
     setIsIncomeModalOpen(false);
   };
 
   const handleCloseExpenseModal = () => {
+    Keyboard.dismiss();
     setExpAmount('');
     setExpReason('');
     setExpRecurringBillId('');
+    setExpMode('category');
     setExpCategory(categories[0]?.name || 'Food');
     setExpAccount(accounts[0]?.name || 'Cash in Hand');
     setExpDate(getTodayDateStr());
+    setIsDatePickerOpen(false);
     setIsExpenseModalOpen(false);
   };
 
@@ -392,18 +402,25 @@ export default function HomeScreen() {
 
   // Handle Adding Expense
   const handleAddExpenseSubmit = () => {
+    Keyboard.dismiss();
     const num = parseFloat(expAmount);
     if (isNaN(num) || num <= 0) return;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     const dateStr = expDate.trim() || getTodayDateStr();
+
+    const isBill = expMode === 'bill' && Boolean(expRecurringBillId);
+    const selectedBill = isBill ? envelopes.find((b) => b.id === expRecurringBillId) : null;
+    const finalCategory = isBill ? (selectedBill?.name || 'Recurring Bill') : expCategory;
+    const finalReason = expReason.trim() || (isBill ? (selectedBill?.name || 'Recurring Bill') : 'General Expense');
+
     addExpense({
       date: dateStr,
-      category: expCategory,
+      category: finalCategory,
       amount: num,
-      reason: expReason.trim() || 'General Expense',
+      reason: finalReason,
       stored: expAccount,
       type: 'outgoing',
-      recurringBillId: expRecurringBillId || undefined,
+      recurringBillId: isBill ? expRecurringBillId : undefined,
     });
     handleCloseExpenseModal();
   };
@@ -493,11 +510,23 @@ export default function HomeScreen() {
     });
   }, [envelopes, filteredExpenses]);
 
+  // Helper to strip any emojis from category names for clean display in recent expenses
+  const cleanCategoryName = useCallback((categoryName: string): string => {
+    if (!categoryName) return '';
+    return categoryName
+      .replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F1E6}-\u{1F1FF}\u{1F900}-\u{1F9FF}\u{1FA70}-\u{1FAFF}]/gu, '')
+      .trim();
+  }, []);
+
   // Compute category spent for analytics
   const categoryStats = useMemo(() => {
     return categories.map((cat) => {
+      const cleanCat = cat.name.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim().toLowerCase();
       const spent = filteredExpenses
-        .filter((e) => e.category.toLowerCase().includes(cat.name.toLowerCase()) || cat.name.toLowerCase().includes(e.category.toLowerCase()))
+        .filter((e) => {
+          const cleanExp = e.category.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim().toLowerCase();
+          return cleanExp.includes(cleanCat) || cleanCat.includes(cleanExp);
+        })
         .reduce((sum, e) => sum + e.amount, 0);
       const percent = totalSpent > 0 ? Math.min(100, Math.round((spent / totalSpent) * 100)) : 0;
       return {
@@ -529,6 +558,8 @@ export default function HomeScreen() {
       }
 
       const lower = trimmed.toLowerCase();
+      if (lower.includes('wishlist') || lower.includes('wish')) return '🎁';
+      if (lower.includes('lent') || lower.includes('loan')) return '🤝';
       if (lower.includes('food') || lower.includes('eat') || lower.includes('dining')) return '🍔';
       if (lower.includes('coffee') || lower.includes('tea') || lower.includes('cafe')) return '☕';
       if (lower.includes('transport') || lower.includes('travel') || lower.includes('fuel') || lower.includes('bus')) return '🚗';
@@ -544,32 +575,7 @@ export default function HomeScreen() {
     [categories]
   );
 
-  // Map category name to total spent in active month
-  const categorySpentMap = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const exp of filteredExpenses) {
-      const key = exp.category.trim().toLowerCase();
-      map.set(key, (map.get(key) || 0) + exp.amount);
-    }
-    return map;
-  }, [filteredExpenses]);
 
-  // Active category spending summaries for quick breakdown strip
-  const activeCategorySummaries = useMemo(() => {
-    const map = new Map<string, { name: string; emoji: string; total: number; count: number }>();
-    for (const exp of filteredExpenses) {
-      const key = exp.category.trim().toLowerCase();
-      const existing = map.get(key);
-      const emoji = getCategoryEmoji(exp.category);
-      if (existing) {
-        existing.total += exp.amount;
-        existing.count += 1;
-      } else {
-        map.set(key, { name: exp.category.trim(), emoji, total: exp.amount, count: 1 });
-      }
-    }
-    return Array.from(map.values()).sort((a, b) => b.total - a.total);
-  }, [filteredExpenses, getCategoryEmoji]);
 
   if (!isDbLoaded) {
     return null;
@@ -589,8 +595,10 @@ export default function HomeScreen() {
         {onboardingStage === 'email' && (
           <EmailVerificationModal
             isInline={true}
+            finishBtnText="Continue to Home Screen 🏠✨"
+            badgeText="SECURITY SETUP • RECOVERY EMAIL"
             onVerifiedFinish={async () => {
-              setOnboardingStage('salary');
+              await completeOnboarding();
             }}
           />
         )}
@@ -601,8 +609,8 @@ export default function HomeScreen() {
             isInline={true}
             visible={true}
             onClose={() => { }}
-            onSaveSalary={async (amount, dayStr) => {
-              await configureBaseSalary(amount, dayStr);
+            onSaveSalary={async (amount, dayStr, accId) => {
+              await configureBaseSalary(amount, dayStr, undefined, accId);
               await completeOnboarding();
             }}
             onSkipSalary={async () => {
@@ -627,90 +635,92 @@ export default function HomeScreen() {
         style={styles.screenGridBg}
         imageStyle={{ opacity: 0.65 }}
       >
-      {/* Header */}
-      <ThemeHeader
-        title={
-          isAdminMode
-            ? 'Admin Control Panel '
-            : activeSegment === 'dashboard'
-              ? 'Monthly Budget'
-              : activeSegment === 'calendar'
-                ? 'Calendar View 📅'
-                : 'Analytics & Insights 📊'
-        }
-        subtitle={
-          isAdminMode
-            ? 'Manage database tables & inspect system storage'
-            : 'Keep track of your monthly glow-up finances'
-        }
-        stickerKey="home"
-      />
-
-      {/* ===================== DEV MODE: CLEAR ALL DATA ===================== */}
-      {isDevMode && (
-        <View
-          style={[
-            styles.devModeBanner,
-            {
-              backgroundColor: colors.bgCard,
-              borderColor: colors.danger,
-              ...colors.cardShadow,
-            },
-          ]}
-        >
-          <View style={styles.devModeHeader}>
-            <View style={[styles.devModeBadge, { backgroundColor: colors.dangerLight || '#fee2e2' }]}>
-              <Ionicons name="construct" size={13} color={colors.danger} />
-              <Text style={[styles.devModeBadgeText, { color: colors.danger }]}>DEV MODE ACTIVE</Text>
-            </View>
-          </View>
-
-          <View style={{ gap: 10 }}>
-            <TouchableOpacity
-              style={[styles.devClearBtn, { backgroundColor: colors.danger }]}
-              onPress={handleDevClearAllData}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="trash-outline" size={16} color="#ffffff" />
-              <Text style={styles.devClearBtnText}>Clear All Data</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.devClearBtn, { backgroundColor: colors.danger }]}
-              onPress={handleClearPins}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="refresh-outline" size={16} color="#ffffff" />
-              <Text style={styles.devClearBtnText}>Reset PIN</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-
-
-      <>
-        {/* Segment Switcher */}
-        <SegmentedControl<HomeSegment>
-          options={[
-            { key: 'dashboard', label: 'Dashboard ' },
-            { key: 'calendar', label: 'Calendar ' },
-            { key: 'analytics', label: 'Analytics ' },
-          ]}
-          selectedKey={activeSegment}
-          onSelect={setActiveSegment}
+        {/* Header */}
+        <ThemeHeader
+          title={
+            isAdminMode
+              ? 'Admin Control Panel '
+              : activeSegment === 'dashboard'
+                ? 'Monthly Budget'
+                : activeSegment === 'calendar'
+                  ? 'Calendar View 📅'
+                  : 'Analytics & Insights 📊'
+          }
+          subtitle={
+            isAdminMode
+              ? 'Manage database tables'
+              : 'Keep track of your monthly finances'
+          }
+          stickerKey="home"
         />
 
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          contentContainerStyle={styles.scrollContent}
-        >
-          {/* ===================== VIEW 1: DASHBOARD ===================== */}
-          {activeSegment === 'dashboard' && (
-            <View style={styles.viewContainer}>
-              {/* Month Navigator Header Bar */}
-              {/* <View style={[styles.dashboardMonthBar, { backgroundColor: colors.bgCard, ...colors.cardShadow }]}>
+        {/* ===================== DEV MODE: CLEAR ALL DATA ===================== */}
+        {isDevMode && (
+          <View
+            style={[
+              styles.devModeBanner,
+              {
+                backgroundColor: colors.bgCard,
+                borderColor: colors.danger,
+                ...colors.cardShadow,
+              },
+            ]}
+          >
+            <View style={styles.devModeHeader}>
+              <View style={[styles.devModeBadge, { backgroundColor: colors.dangerLight || '#fee2e2' }]}>
+                <Ionicons name="construct" size={13} color={colors.danger} />
+                <Text style={[styles.devModeBadgeText, { color: colors.danger }]}>DEV MODE ACTIVE</Text>
+              </View>
+            </View>
+
+            <View style={{ gap: 10 }}>
+              <TouchableOpacity
+                style={[styles.devClearBtn, { backgroundColor: colors.danger }]}
+                onPress={handleDevClearAllData}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="trash-outline" size={16} color="#ffffff" />
+                <Text style={styles.devClearBtnText}>Clear All Data</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.devClearBtn, { backgroundColor: colors.danger }]}
+                onPress={handleClearPins}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="refresh-outline" size={16} color="#ffffff" />
+                <Text style={styles.devClearBtnText}>Reset PIN</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+
+        <>
+          {/* Segment Switcher */}
+          <SegmentedControl<HomeSegment>
+            options={[
+              { key: 'dashboard', label: 'Dashboard ' },
+              { key: 'calendar', label: 'Calendar ' },
+              { key: 'analytics', label: 'Analytics ' },
+            ]}
+            selectedKey={activeSegment}
+            onSelect={setActiveSegment}
+          />
+
+          <ScrollView
+            style={{ flex: 1 }}
+            nestedScrollEnabled={true}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            contentContainerStyle={styles.scrollContent}
+          >
+            {/* ===================== VIEW 1: DASHBOARD ===================== */}
+            {activeSegment === 'dashboard' && (
+              <View style={styles.viewContainer}>
+                {/* Month Navigator Header Bar */}
+                {/* <View style={[styles.dashboardMonthBar, { backgroundColor: colors.bgCard, ...colors.cardShadow }]}>
                   <TouchableOpacity
                     onPress={handlePrevCalMonth}
                     style={styles.monthNavBtn}
@@ -757,786 +767,863 @@ export default function HomeScreen() {
                   </View>
                 </View> */}
 
-                            {/* Hero Totoro-ly Important Notes Banner */}
-              <View
-                style={[
-                  styles.totoroHeroCard,
-                  {
-                    backgroundColor: colors.bgCard,
-                    borderColor: colors.borderSoft,
-                    ...colors.cardShadow,
-                  },
-                ]}
-              >
-                <View style={styles.totoroHeroTopRow}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <TotoroSticker type="star" size={28} />
-                    <Text style={[styles.totoroHeroTitle, { color: colors.textMain }]}>
-                      Totoro-ly Important Budget
-                    </Text>
-                  </View>
-                  <TotoroSticker type="peek" size={66} style={styles.heroPeekSticker} />
-                </View>
-
-                <View style={styles.totoroHeroContent}>
-                  <Text style={[styles.totoroHeroSub, { color: colors.textMuted }]}>
-                    {selectedMonth === 'ALL' ? 'Lifetime Available Surplus' : currentMonthName + ' Available Surplus'}
-                  </Text>
-                  <View style={styles.totoroHeroAmountRow}>
-                    <Text
-                      style={[
-                        styles.totoroHeroAmount,
-                        { color: remainingBudget >= 0 ? colors.textMain : colors.danger },
-                      ]}
-                      numberOfLines={1}
-                      adjustsFontSizeToFit
-                    >
-                      {currencySymbol} {remainingBudget.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
-                    </Text>
-                    <View
-                      style={[
-                        styles.totoroHeroBadge,
-                        {
-                          backgroundColor: remainingBudget >= 0 ? colors.primaryGreenLight : colors.dangerLight,
-                          borderColor: remainingBudget >= 0 ? colors.primaryGreen : colors.danger,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.totoroHeroBadgeText,
-                          { color: remainingBudget >= 0 ? colors.primaryGreen : colors.danger },
-                        ]}
-                      >
-                        {remainingBudget >= 0 ? '✓ On Track' : '⚠️ Over Budget'}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              </View>
-
-              {/* 4 Summary Cards */}
-              <View style={styles.metricsGrid}>
-                {hasBaseSalary ? (
-                  <>
-                    {/* Card 1: Base Salary */}
-                    <TouchableOpacity
-                      activeOpacity={0.8}
-                      onPress={() => {
-                        setIsSalaryModalOpen(true);
-                      }}
-                      style={[
-                        styles.metricCard,
-                        {
-                          backgroundColor: colors.bgCard,
-                          borderColor: colors.borderSoft,
-                          ...colors.cardShadow,
-                        },
-                      ]}
-                    >
-                      <TotoroSticker type="big" size={64} style={styles.cardCornerSticker} />
-                      <View style={styles.metricHeaderRow}>
-                        <View style={[styles.paperIconBadge, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
-                          <Ionicons name="wallet-outline" size={15} color={colors.textMain} />
-                        </View>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                          {isSalaryLoaded ? (
-                            <View style={[styles.badgePill, { backgroundColor: colors.primaryGreenLight, borderColor: colors.primaryGreenLight }]}>
-                              <Text style={[styles.badgePillText, { color: colors.primaryGreen }]}>Loaded</Text>
-                            </View>
-                          ) : (
-                            <View style={[styles.badgePill, { backgroundColor: colors.warningLight, borderColor: colors.warningLight }]}>
-                              <Text style={[styles.badgePillText, { color: colors.warning }]}>
-                                {daysUntilPayday === 1 ? 'Tomorrow' : 'In ' + daysUntilPayday + 'd'}
-                              </Text>
-                            </View>
-                          )}
-                          <Ionicons name="pencil" size={11} color={colors.textSubtle} />
-                        </View>
-                      </View>
-                      <Text style={[styles.metricLabel, { color: colors.textMuted }]}>
-                        {selectedMonth === 'ALL' ? 'Base Salary' : 'Base Salary'}
-                      </Text>
-                      <Text style={[styles.metricValue, { color: colors.textMain }]} numberOfLines={1} adjustsFontSizeToFit>
-                        {currencySymbol} {activeMonthSalary.toLocaleString()}
-                      </Text>
-                      <Text
-                        style={{
-                          fontSize: 10,
-                          fontWeight: '500',
-                          marginTop: 3,
-                          color: isSalaryLoaded || selectedMonth === 'ALL' ? colors.primaryGreen : colors.textSubtle,
-                        }}
-                        numberOfLines={1}
-                      >
-                        {selectedMonth === 'ALL'
-                          ? 'Across all months'
-                          : isSalaryLoaded
-                            ? ('In ' + (accounts.find((a) => a.id === salaryAccountId)?.name || 'Cash in Hand'))
-                            : ('Due on ' + baseSalaryDate + 'th')}
-                      </Text>
-                    </TouchableOpacity>
-
-                    {/* Card 2: Spent */}
-                    <View
-                      style={[
-                        styles.metricCard,
-                        {
-                          backgroundColor: colors.bgCard,
-                          borderColor: colors.borderSoft,
-                          ...colors.cardShadow,
-                        },
-                      ]}
-                    >
-                      <TotoroSticker type="spent" size={62} style={styles.cardCornerSticker} />
-                      <View style={styles.metricHeaderRow}>
-                        <View style={[styles.paperIconBadge, { backgroundColor: colors.dangerLight, borderColor: colors.dangerLight }]}>
-                          <Ionicons name="arrow-up-circle-outline" size={15} color={colors.danger} />
-                        </View>
-                        <View style={[styles.badgePill, { backgroundColor: colors.dangerLight, borderColor: colors.dangerLight }]}>
-                          <Text style={[styles.badgePillText, { color: colors.danger }]}>Spent</Text>
-                        </View>
-                      </View>
-                      <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Total Spent</Text>
-                      <Text style={[styles.metricValue, { color: colors.danger }]} numberOfLines={1} adjustsFontSizeToFit>
-                        {currencySymbol} {totalSpent.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
-                      </Text>
-                    </View>
-
-                    {/* Card 3: Total Income */}
-                    <TouchableOpacity
-                      activeOpacity={0.8}
-                      onPress={() => {
-                        setIncDate(getTodayDateStr());
-                        setIncAmount('');
-                        setIncNote('');
-                        setIsIncomeModalOpen(true);
-                      }}
-                      style={[
-                        styles.metricCard,
-                        {
-                          backgroundColor: colors.bgCard,
-                          borderColor: colors.borderSoft,
-                          ...colors.cardShadow,
-                        },
-                      ]}
-                    >
-                      <TotoroSticker type="leaf" size={62} style={styles.cardCornerSticker} />
-                      <View style={styles.metricHeaderRow}>
-                        <View style={[styles.paperIconBadge, { backgroundColor: colors.primaryGreenLight, borderColor: colors.primaryGreenLight }]}>
-                          <Ionicons name="arrow-down-circle-outline" size={15} color={colors.primaryGreen} />
-                        </View>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-                          <View style={[styles.badgePill, { backgroundColor: colors.primaryGreenLight, borderColor: colors.primaryGreenLight }]}>
-                            <Text style={[styles.badgePillText, { color: colors.primaryGreen }]}>Inflow</Text>
-                          </View>
-                          <Ionicons name="add" size={13} color={colors.primaryGreen} />
-                        </View>
-                      </View>
-                      <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Total Income</Text>
-                      <Text style={[styles.metricValue, { color: colors.primaryGreen }]} numberOfLines={1} adjustsFontSizeToFit>
-                        {currencySymbol} {totalIncome.toLocaleString()}
-                      </Text>
-                    </TouchableOpacity>
-
-                    {/* Card 4: Remaining */}
-                    <View
-                      style={[
-                        styles.metricCard,
-                        {
-                          backgroundColor: colors.bgCard,
-                          borderColor: colors.borderSoft,
-                          ...colors.cardShadow,
-                        },
-                      ]}
-                    >
-                      <TotoroSticker type="savings" size={62} style={styles.cardCornerSticker} />
-                      <View style={styles.metricHeaderRow}>
-                        <View style={[styles.paperIconBadge, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
-                          <Ionicons name="pie-chart-outline" size={15} color={colors.textMain} />
-                        </View>
-                        <View style={[styles.badgePill, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
-                          <Text style={[styles.badgePillText, { color: colors.textMain }]}>Balance</Text>
-                        </View>
-                      </View>
-                      <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Remaining</Text>
-                      <Text style={[styles.metricValue, { color: remainingBudget >= 0 ? colors.textMain : colors.danger }]} numberOfLines={1} adjustsFontSizeToFit>
-                        {currencySymbol} {remainingBudget.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
-                      </Text>
-                    </View>
-                  </>
-                ) : (
-                  <>
-                    {/* Card 1: Total Income */}
-                    <TouchableOpacity
-                      activeOpacity={0.8}
-                      onPress={() => {
-                        setIncDate(getTodayDateStr());
-                        setIncAmount('');
-                        setIncNote('');
-                        setIsIncomeModalOpen(true);
-                      }}
-                      style={[
-                        styles.metricCard,
-                        {
-                          backgroundColor: colors.bgCard,
-                          borderColor: colors.borderSoft,
-                          ...colors.cardShadow,
-                        },
-                      ]}
-                    >
-                      <TotoroSticker type="leaf" size={62} style={styles.cardCornerSticker} />
-                      <View style={styles.metricHeaderRow}>
-                        <View style={[styles.paperIconBadge, { backgroundColor: colors.primaryGreenLight, borderColor: colors.primaryGreenLight }]}>
-                          <Ionicons name="arrow-down-circle-outline" size={15} color={colors.primaryGreen} />
-                        </View>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-                          <View style={[styles.badgePill, { backgroundColor: colors.primaryGreenLight, borderColor: colors.primaryGreenLight }]}>
-                            <Text style={[styles.badgePillText, { color: colors.primaryGreen }]}>Inflow</Text>
-                          </View>
-                          <Ionicons name="add" size={13} color={colors.primaryGreen} />
-                        </View>
-                      </View>
-                      <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Total Income</Text>
-                      <Text style={[styles.metricValue, { color: colors.primaryGreen }]} numberOfLines={1} adjustsFontSizeToFit>
-                        {currencySymbol} {totalIncome.toLocaleString()}
-                      </Text>
-                    </TouchableOpacity>
-
-                    {/* Card 2: Spent */}
-                    <View
-                      style={[
-                        styles.metricCard,
-                        {
-                          backgroundColor: colors.bgCard,
-                          borderColor: colors.borderSoft,
-                          ...colors.cardShadow,
-                        },
-                      ]}
-                    >
-                      <TotoroSticker type="spent" size={62} style={styles.cardCornerSticker} />
-                      <View style={styles.metricHeaderRow}>
-                        <View style={[styles.paperIconBadge, { backgroundColor: colors.dangerLight, borderColor: colors.dangerLight }]}>
-                          <Ionicons name="arrow-up-circle-outline" size={15} color={colors.danger} />
-                        </View>
-                        <View style={[styles.badgePill, { backgroundColor: colors.dangerLight, borderColor: colors.dangerLight }]}>
-                          <Text style={[styles.badgePillText, { color: colors.danger }]}>Spent</Text>
-                        </View>
-                      </View>
-                      <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Total Spent</Text>
-                      <Text style={[styles.metricValue, { color: colors.danger }]} numberOfLines={1} adjustsFontSizeToFit>
-                        {currencySymbol} {totalSpent.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
-                      </Text>
-                    </View>
-
-                    {/* Card 3: Remaining */}
-                    <View
-                      style={[
-                        styles.metricCard,
-                        {
-                          backgroundColor: colors.bgCard,
-                          borderColor: colors.borderSoft,
-                          ...colors.cardShadow,
-                        },
-                      ]}
-                    >
-                      <TotoroSticker type="big" size={64} style={styles.cardCornerSticker} />
-                      <View style={styles.metricHeaderRow}>
-                        <View style={[styles.paperIconBadge, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
-                          <Ionicons name="pie-chart-outline" size={15} color={colors.textMain} />
-                        </View>
-                        <View
-                          style={[
-                            styles.badgePill,
-                            {
-                              backgroundColor: remainingBudget >= 0 ? colors.primaryGreenLight : colors.dangerLight,
-                              borderColor: remainingBudget >= 0 ? colors.primaryGreenLight : colors.dangerLight,
-                            },
-                          ]}
-                        >
-                          <Text style={[styles.badgePillText, { color: remainingBudget >= 0 ? colors.primaryGreen : colors.danger }]}>
-                            {remainingBudget >= 0 ? 'Surplus' : 'Deficit'}
-                          </Text>
-                        </View>
-                      </View>
-                      <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Monthly Balance</Text>
-                      <Text style={[styles.metricValue, { color: remainingBudget >= 0 ? colors.textMain : colors.danger }]} numberOfLines={1} adjustsFontSizeToFit>
-                        {currencySymbol} {remainingBudget.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
-                      </Text>
-                    </View>
-
-                    {/* Card 4: Savings Rate */}
-                    <View
-                      style={[
-                        styles.metricCard,
-                        {
-                          backgroundColor: colors.bgCard,
-                          borderColor: colors.borderSoft,
-                          ...colors.cardShadow,
-                        },
-                      ]}
-                    >
-                      <TotoroSticker type="curious" size={42} style={styles.cardCornerSticker} />
-                      <View style={styles.metricHeaderRow}>
-                        <View style={[styles.paperIconBadge, { backgroundColor: colors.primaryGreenLight, borderColor: colors.primaryGreenLight }]}>
-                          <Ionicons name="trending-up-outline" size={15} color={colors.primaryGreen} />
-                        </View>
-                        <View style={[styles.badgePill, { backgroundColor: colors.primaryGreenLight, borderColor: colors.primaryGreenLight }]}>
-                          <Text style={[styles.badgePillText, { color: colors.primaryGreen }]}>Rate</Text>
-                        </View>
-                      </View>
-                      <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Savings Ratio</Text>
-                      <Text style={[styles.metricValue, { color: colors.primaryGreen }]} numberOfLines={1} adjustsFontSizeToFit>
-                        {totalIncome > 0 ? Math.max(0, Math.round(((totalIncome - totalSpent) / totalIncome) * 100)) + '%' : '0%'}
-                      </Text>
-                    </View>
-                  </>
-                )}
-              </View>
-
-              {/* Quick Action Buttons */}
-              <View style={styles.actionButtonsRow}>
-                {/* Add Expense */}
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  onPress={() => {
-                    setExpDate(getTodayDateStr());
-                    setExpAmount('');
-                    setExpReason('');
-                    setExpRecurringBillId('');
-                    setIsExpenseModalOpen(true);
-                  }}
+                {/* Hero Totoro-ly Important Notes Banner */}
+                <View
                   style={[
-                    styles.primaryActionBtn,
-                    { flex: 1, backgroundColor: colors.primaryAccent, ...colors.cardShadow },
-                  ]}
-                >
-                  <Ionicons name="remove-circle" size={18} color={colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214')} />
-                  <Text
-                    style={[styles.primaryActionText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}
-                    numberOfLines={1}
-                  >
-                    Add Expense
-                  </Text>
-                </TouchableOpacity>
-
-                {/* Add Income */}
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  onPress={() => {
-                    setIncDate(getTodayDateStr());
-                    setIncAmount('');
-                    setIncNote('');
-                    setIsIncomeModalOpen(true);
-                  }}
-                  style={[
-                    styles.secondaryActionBtn,
+                    styles.totoroHeroCard,
                     {
-                      flex: 1,
                       backgroundColor: colors.bgCard,
-                      borderColor: 'transparent',
-                      borderWidth: 0,
+                      borderColor: colors.borderSoft,
                       ...colors.cardShadow,
                     },
                   ]}
                 >
-                  <Ionicons name="add-circle" size={18} color={colors.primaryGreen} />
-                  <Text
-                    style={[styles.secondaryActionText, { color: colors.textMain }]}
-                    numberOfLines={1}
-                  >
-                    Add Income
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* MONTHLY RECURRING & BILLS (Utilities, Rent, Groceries, etc.) */}
-              {showMonthlyBills && (
-                <View style={[styles.envelopesCard, { backgroundColor: colors.bgCard, ...colors.cardShadow }]}>
-                  {/* Card Header */}
-                  <View style={styles.envelopeCardHeader}>
-                    <View style={styles.envelopeTitleContainer}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={[styles.envelopeHeaderTitle, { color: colors.textMain }]} numberOfLines={1}>
-                          MONTHLY RECURRING & BILLS
-                        </Text>
-                        <Text style={[styles.envelopeHeaderSub, { color: colors.textMuted }]} numberOfLines={1}>
-                          Utilities, Rent, Groceries
-                        </Text>
-                      </View>
-                    </View>
-
-                    <View style={styles.envelopeHeaderActions}>
-                      {/* View Mode Switcher Button */}
-                      <TouchableOpacity
-                        activeOpacity={0.7}
-                        onPress={() => {
-                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                          setEnvelopeViewMode((prev) => (prev === 'table' ? 'progress' : 'table'));
-                        }}
-                        style={[styles.envelopeToggleBtn, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}
-                      >
-                        <Ionicons
-                          name={envelopeViewMode === 'table' ? 'bar-chart-outline' : 'list-outline'}
-                          size={14}
-                          color={colors.textMain}
-                        />
-                      </TouchableOpacity>
-
-                      {/* + Add Bill Button */}
-                      <TouchableOpacity
-                        activeOpacity={0.7}
-                        onPress={() => setIsAddEnvelopeModalOpen(true)}
-                        style={[styles.addCategoryPillBtn, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}
-                      >
-                        <Text style={[styles.addCategoryPillText, { color: colors.textMain }]} numberOfLines={1}>+ Add Bill</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-
-                  {envelopes.length === 0 ? (
-                    /* EMPTY BILLS STATE */
-                    <View style={styles.emptyEnvelopeBox}>
-                      <Text style={[styles.emptyEnvelopeTitle, { color: colors.textMain }]}>No Recurring Bills or Utilities Yet</Text>
-                      <Text style={[styles.emptyEnvelopeSub, { color: colors.textMuted }]}>
-                        Plan and track recurring monthly essentials like Electricity, Water, Rent, Groceries, and Wi-Fi. Set expected monthly amounts and track actual spending.
+                  <TotoroSticker type="peek" size={70} style={styles.heroPeekSticker} />
+                  <View style={styles.totoroHeroTopRow}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      {/* <TotoroSticker type="star" size={28} /> */}
+                      <Text style={[styles.totoroHeroTitle, { color: colors.textMain }]}>
+                        {selectedMonth === 'ALL' ? 'Lifetime Available Surplus' : currentMonthName + ' Net Balance'}
                       </Text>
                     </View>
-                  ) : envelopeViewMode === 'table' ? (
-                    /* TABLE VIEW */
-                    <View style={styles.envelopeTable}>
-                      {/* Table Column Headers */}
-                      <View style={[styles.tableHeaderRow, { backgroundColor: colors.bgSecondary }]}>
-                        <Text style={[styles.colHeaderCategory, { color: colors.textMuted }]}>
-                          RECURRING BILL / UTILITY
-                        </Text>
-                        <Text style={[styles.colHeaderBudgeted, { color: colors.textMuted }]}>
-                          MONTHLY BUDGET
-                        </Text>
-                      </View>
-
-                      {/* Envelope Rows */}
-                      {envelopeStats.map((env, idx) => (
-                        <TouchableOpacity
-                          key={env.id}
-                          activeOpacity={0.75}
-                          onPress={() => {
-                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                            setSelectedEnvelopeForEdit(env);
-                            setEditEnvBudget(env.budgeted.toString());
-                            setIsEditEnvelopeModalOpen(true);
-                          }}
-                          style={[
-                            styles.tableRowItem,
-                            { borderBottomColor: 'rgba(0,0,0,0.05)' },
-                            idx === envelopeStats.length - 1 && { borderBottomWidth: 0 },
-                          ]}
-                        >
-                          <View style={styles.tableRowLeft}>
-                            <View style={[styles.catColorDot, { backgroundColor: env.color }]} />
-                            <Text style={styles.catEmojiText}>{env.emoji}</Text>
-                            <View style={{ flex: 1, marginRight: 6 }}>
-                              <Text
-                                style={[styles.catNameText, { color: colors.textMain }]}
-                                numberOfLines={1}
-                              >
-                                {env.name.replace(env.emoji, '').trim() || env.name}
-                              </Text>
-                              <Text style={{ fontSize: 10, color: colors.textMuted, fontWeight: '600', marginTop: 1 }} numberOfLines={1}>
-                                Spent: {currencySymbol} {env.spent.toFixed(2)} ({env.percent}%)
-                              </Text>
-                            </View>
-                          </View>
-                          <View style={{ alignItems: 'flex-end', minWidth: 90 }}>
-                            <Text style={[styles.catBudgetText, { color: colors.textMain }]} numberOfLines={1} adjustsFontSizeToFit>
-                              {currencySymbol} {env.budgeted.toFixed(2)}
-                            </Text>
-                            <Text style={{ fontSize: 10, color: env.remaining > 0 ? colors.primaryGreen : colors.danger, fontWeight: '700', marginTop: 1 }} numberOfLines={1}>
-                              {env.remaining > 0 ? `Left: ${currencySymbol} ${env.remaining.toFixed(2)}` : 'Limit reached'}
-                            </Text>
-                          </View>
-                        </TouchableOpacity>
-                      ))}
-
-                      {/* TOTAL Highlight Row */}
-                      <View style={[styles.tableTotalRow, { backgroundColor: colors.bgSecondary }]}>
-                        <Text style={[styles.totalLabelText, { color: colors.textMain }]}>TOTAL MONTHLY BUDGET</Text>
-                        <Text style={[styles.totalValueText, { color: colors.textMain }]} numberOfLines={1} adjustsFontSizeToFit>
-                          {currencySymbol} {totalEnvelopesBudgeted.toFixed(2)}
-                        </Text>
-                      </View>
-                    </View>
-                  ) : (
-                    /* PROGRESS VIEW: Spent vs Budget Bar Tracker */
-                    <View style={styles.envelopesList}>
-                      {envelopeStats.map((item) => (
-                        <TouchableOpacity
-                          key={item.id}
-                          activeOpacity={0.75}
-                          onPress={() => {
-                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                            setSelectedEnvelopeForEdit(item);
-                            setEditEnvBudget(item.budgeted.toString());
-                            setIsEditEnvelopeModalOpen(true);
-                          }}
-                          style={styles.envelopeItem}
-                        >
-                          <View style={styles.envelopeTopRow}>
-                            <View style={styles.envelopeTitleWrapper}>
-                              <View style={[styles.colorDot, { backgroundColor: item.color }]} />
-                              <Text style={[styles.envelopeName, { color: colors.textMain }]}>{item.name}</Text>
-                            </View>
-                            <Text style={[styles.envelopeAmount, { color: colors.textMuted }]}>
-                              {currencySymbol} {item.spent.toFixed(2)} / <Text style={{ color: colors.textMain, fontWeight: '700' }}>{currencySymbol} {item.budgeted.toFixed(2)}</Text>
-                            </Text>
-                          </View>
-
-                          {/* Progress Bar */}
-                          <View style={[styles.progressBarBg, { backgroundColor: colors.bgSecondary }]}>
-                            <View
-                              style={[
-                                styles.progressBarFill,
-                                {
-                                  width: `${Math.min(100, item.percent)}%`,
-                                  backgroundColor: item.percent > 90 ? colors.danger : item.color,
-                                },
-                              ]}
-                            />
-                          </View>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  )}
-                </View>
-              )}
-
-              {/* Recent Expenses List */}
-              <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, ...colors.cardShadow }]}>
-                <View style={styles.sectionHeaderRow}>
-                  <Text style={[styles.sectionTitle, { color: colors.textMain }]}>Recent Expenses 🧾</Text>
-                  <Text style={[styles.countBadge, { color: colors.textMuted }]}>{filteredExpenses.length} total</Text>
-                </View>
-
-                {/* Category Spending Overview Strip */}
-                {activeCategorySummaries.length > 0 && (
-                  <View style={styles.catSpendStrip}>
-                    <Text style={[styles.catSpendStripLabel, { color: colors.textMuted }]}>
-                      SPENT BY CATEGORY:
-                    </Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.catSpendScroll}>
-                      {activeCategorySummaries.map((cat) => (
-                        <View
-                          key={cat.name}
-                          style={[
-                            styles.catSpendChip,
-                            { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft },
-                          ]}
-                        >
-                          <Text style={styles.catSpendChipEmoji}>{cat.emoji}</Text>
-                          <Text style={[styles.catSpendChipName, { color: colors.textMain }]}>
-                            {cat.name}:
-                          </Text>
-                          <Text style={[styles.catSpendChipAmount, { color: colors.danger }]}>
-                            {currencySymbol} {cat.total.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
-                          </Text>
-                        </View>
-                      ))}
-                    </ScrollView>
                   </View>
-                )}
 
-                {filteredExpenses.length === 0 ? (
-                  <View style={styles.emptyEnvelopeBox}>
-                    <Text style={[styles.emptyEnvelopeTitle, { color: colors.textMain }]}>No Expenses Recorded</Text>
-                    <Text style={[styles.emptyEnvelopeSub, { color: colors.textMuted }]}>
-                      Tap &ldquo;- Expense&rdquo; above to record an outflow for this period.
-                    </Text>
-                  </View>
-                ) : (
-                  <View style={styles.transactionList}>
-                    {filteredExpenses.map((exp) => {
-                      const linkedBill = exp.recurringBillId ? envelopes.find((b) => b.id === exp.recurringBillId) : null;
-                      const catEmoji = getCategoryEmoji(exp.category);
-                      const catTotal = categorySpentMap.get(exp.category.trim().toLowerCase()) || exp.amount;
-                      return (
-                        <View key={exp.id} style={[styles.txItem, { borderBottomColor: 'rgba(0,0,0,0.05)' }]}>
-                          <View style={styles.txLeft}>
-                            <View style={[styles.txEmojiCircle, { backgroundColor: colors.bgSecondary }]}>
-                              <Text style={styles.txEmoji}>{catEmoji}</Text>
-                            </View>
-                            <View style={styles.txInfo}>
-                              <Text style={[styles.txTitle, { color: colors.textMain }]} numberOfLines={1}>{exp.reason}</Text>
-                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
-                                <Text style={[styles.txSub, { color: colors.textMuted, marginTop: 0 }]}>
-                                  {exp.date} • {exp.stored}
-                                </Text>
-                                {/* Category Spent Badge */}
-                                <View style={[styles.badgePill, { backgroundColor: colors.bgSecondary, paddingVertical: 1 }]}>
-                                  <Text style={{ fontSize: 10, color: colors.textMain, fontWeight: '700' }} numberOfLines={1}>
-                                    {catEmoji} {exp.category} ({currencySymbol} {catTotal.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} total)
-                                  </Text>
-                                </View>
-                                {linkedBill && (
-                                  <View style={[styles.badgePill, { backgroundColor: colors.bgSecondary, paddingVertical: 1 }]}>
-                                    <Text style={{ fontSize: 10, color: colors.textMain, fontWeight: '700' }} numberOfLines={1}>
-                                      {linkedBill.emoji} {linkedBill.name}
-                                    </Text>
-                                  </View>
-                                )}
-                              </View>
-                            </View>
-                          </View>
-                          <Text style={[styles.txExpenseAmount, { color: colors.danger }]} numberOfLines={1} adjustsFontSizeToFit>
-                            -{currencySymbol} {exp.amount.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
-                          </Text>
-                        </View>
-                      );
-                    })}
-                  </View>
-                )}
-              </View>
-
-              {/* Income Streams List */}
-              <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, ...colors.cardShadow }]}>
-                <View style={styles.sectionHeaderRow}>
-                  <Text style={[styles.sectionTitle, { color: colors.textMain }]}>Income Streams 💵</Text>
-                  <Text style={[styles.countBadge, { color: colors.textMuted }]}>{filteredIncomes.length} items</Text>
-                </View>
-
-                {filteredIncomes.length === 0 ? (
-                  <View style={styles.emptyEnvelopeBox}>
-                    <Text style={[styles.emptyEnvelopeTitle, { color: colors.textMain }]}>No Additional Income</Text>
-                    <Text style={[styles.emptyEnvelopeSub, { color: colors.textMuted }]}>
-                      Tap &ldquo;+ Income&rdquo; above to record freelance, bonus, or investment returns.
-                    </Text>
-                  </View>
-                ) : (
-                  <View style={styles.transactionList}>
-                    {filteredIncomes.map((inc) => (
-                      <View key={inc.id} style={[styles.txItem, { borderBottomColor: 'rgba(0,0,0,0.05)' }]}>
-                        <View style={styles.txLeft}>
-                          <View style={[styles.txEmojiCircle, { backgroundColor: colors.bgSecondary }]}>
-                            <Text style={styles.txEmoji}>👛</Text>
-                          </View>
-                          <View style={styles.txInfo}>
-                            <Text style={[styles.txTitle, { color: colors.textMain }]} numberOfLines={1}>{inc.note}</Text>
-                            <Text style={[styles.txSub, { color: colors.textMuted }]}>
-                              {inc.date} • {inc.stored}
-                            </Text>
-                          </View>
-                        </View>
-                        <Text style={[styles.txIncomeAmount, { color: colors.primaryGreen }]} numberOfLines={1} adjustsFontSizeToFit>
-                          +{currencySymbol} {inc.amount.toLocaleString()}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
-              </View>
-            </View>
-          )}
-
-          {/* ===================== VIEW 2: CALENDAR ===================== */}
-          {activeSegment === 'calendar' && (
-            <View style={styles.viewContainer}>
-              <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, ...colors.cardShadow }]}>
-                <View style={styles.calendarNavRow}>
-                  <TouchableOpacity
-                    onPress={handlePrevCalMonth}
-                    style={styles.calNavBtn}
-                  >
-                    <Ionicons name="chevron-back" size={20} color={colors.textMain} />
-                  </TouchableOpacity>
-                  <Text style={[styles.calMonthTitle, { color: colors.textMain }]}>{currentMonthName}</Text>
-                  <TouchableOpacity onPress={handleNextCalMonth} style={styles.calNavBtn}>
-                    <Ionicons name="chevron-forward" size={20} color={colors.textMain} />
-                  </TouchableOpacity>
-                </View>
-
-                {/* Day headers */}
-                <View style={styles.calDaysHeader}>
-                  {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((d, i) => (
-                    <Text key={i} style={[styles.calDayHeadText, { color: colors.textMuted }]}>
-                      {d}
-                    </Text>
-                  ))}
-                </View>
-
-                {/* Grid */}
-                <View style={styles.calGrid}>
-                  {/* Blank Padding Cells for Month Alignment */}
-                  {Array.from({ length: firstDayOffset }).map((_, i) => (
-                    <View key={`cal-blank-${i}`} style={styles.calDayCell} />
-                  ))}
-
-                  {/* Days 1 .. N */}
-                  {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
-                    const nowObj = new Date();
-                    const isToday =
-                      day === nowObj.getDate() &&
-                      selectedMonthIndex === nowObj.getMonth() &&
-                      selectedMonthYear === nowObj.getFullYear();
-                    const isSelected = selectedDay === day;
-                    const hasActivity = daysWithActivity.has(day);
-                    const hasSalary = daysWithSalary.has(day);
-                    const hasIncome = daysWithIncome.has(day);
-                    const hasExpense = daysWithExpense.has(day);
-
-                    let bgColor = 'transparent';
-                    let borderColor = 'transparent';
-                    let textColor = colors.textMain;
-                    let borderWidth = 0;
-
-                    if (isSelected && isToday) {
-                      bgColor = colors.primaryAccent;
-                      borderColor = colors.primaryGreen;
-                      borderWidth = 2.5;
-                      textColor = colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214');
-                    } else if (isSelected) {
-                      bgColor = colors.primaryAccent;
-                      borderColor = colors.primaryAccent;
-                      borderWidth = 1;
-                      textColor = colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214');
-                    } else if (isToday) {
-                      bgColor = colors.primaryGreen;
-                      borderColor = colors.primaryGreen;
-                      borderWidth = 1;
-                      textColor = colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214');
-                    }
-
-                    return (
-                      <TouchableOpacity
-                        key={day}
-                        activeOpacity={0.7}
-                        onPress={() => {
-                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                          setSelectedDay(day);
-                        }}
+                  <View style={styles.totoroHeroContent}>
+                    {/* <Text style={[styles.totoroHeroSub, { color: colors.textMuted }]}>
+                      {selectedMonth === 'ALL' ? 'Lifetime Available Surplus' : currentMonthName + ' Available Surplus'}
+                    </Text> */}
+                    <View style={styles.totoroHeroAmountRow}>
+                      <Text
                         style={[
-                          styles.calDayCell,
+                          styles.totoroHeroAmount,
+                          { color: remainingBudget >= 0 ? colors.textMain : colors.danger },
+                        ]}
+                        numberOfLines={1}
+                        adjustsFontSizeToFit
+                      >
+                        {currencySymbol} {remainingBudget.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                      </Text>
+                      <View
+                        style={[
+                          styles.totoroHeroBadge,
                           {
-                            backgroundColor: bgColor,
-                            borderColor: borderColor,
-                            borderWidth: borderWidth,
-                            borderRadius: 12,
+                            backgroundColor: remainingBudget >= 0 ? colors.primaryGreenLight : colors.dangerLight,
+                            borderColor: remainingBudget >= 0 ? colors.primaryGreen : colors.danger,
                           },
                         ]}
                       >
                         <Text
                           style={[
-                            styles.calDayNumber,
+                            styles.totoroHeroBadgeText,
+                            { color: remainingBudget >= 0 ? colors.primaryGreen : colors.danger },
+                          ]}
+                        >
+                          {remainingBudget >= 0 ? '✓ On Track' : '⚠️ Over Budget'}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                </View>
+
+                {/* 4 Summary Cards */}
+                <View style={styles.metricsGrid}>
+                  {hasBaseSalary ? (
+                    <>
+                      {/* Card 1: Base Salary */}
+                      <TouchableOpacity
+                        activeOpacity={0.8}
+                        onPress={() => {
+                          setIsSalaryModalOpen(true);
+                        }}
+                        style={[
+                          styles.metricCard,
+                          {
+                            backgroundColor: colors.bgCard,
+                            borderColor: colors.borderSoft,
+                            ...colors.cardShadow,
+                          },
+                        ]}
+                      >
+                        <TotoroSticker type="big" size={64} style={styles.cardCornerSticker} />
+                        <View style={styles.metricHeaderRow}>
+                          <View style={[styles.paperIconBadge, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
+                            <Ionicons name="wallet-outline" size={15} color={colors.textMain} />
+                          </View>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                            {isSalaryLoaded ? (
+                              <View style={[styles.badgePill, { backgroundColor: colors.primaryGreenLight, borderColor: colors.primaryGreenLight }]}>
+                                <Text style={[styles.badgePillText, { color: colors.primaryGreen }]}>Loaded</Text>
+                              </View>
+                            ) : (
+                              <View style={[styles.badgePill, { backgroundColor: colors.warningLight, borderColor: colors.warningLight }]}>
+                                <Text style={[styles.badgePillText, { color: colors.warning }]}>
+                                  {daysUntilPayday === 1 ? 'Tomorrow' : 'In ' + daysUntilPayday + 'd'}
+                                </Text>
+                              </View>
+                            )}
+                            <Ionicons name="pencil" size={11} color={colors.textSubtle} />
+                          </View>
+                        </View>
+                        <Text style={[styles.metricLabel, { color: colors.textMuted }]}>
+                          {selectedMonth === 'ALL' ? 'Base Salary' : 'Base Salary'}
+                        </Text>
+                        <Text style={[styles.metricValue, { color: colors.textMain }]} numberOfLines={1} adjustsFontSizeToFit>
+                          {currencySymbol} {activeMonthSalary.toLocaleString()}
+                        </Text>
+                        <Text
+                          style={{
+                            fontSize: 10,
+                            fontWeight: '500',
+                            marginTop: 3,
+                            color: isSalaryLoaded || selectedMonth === 'ALL' ? colors.primaryGreen : colors.textSubtle,
+                          }}
+                          numberOfLines={1}
+                        >
+                          {selectedMonth === 'ALL'
+                            ? 'Across all months'
+                            : isSalaryLoaded
+                              ? ('In ' + (accounts.find((a) => a.id === salaryAccountId)?.name || 'Cash in Hand'))
+                              : ('Due on ' + baseSalaryDate + 'th')}
+                        </Text>
+                      </TouchableOpacity>
+
+                      {/* Card 2: Spent */}
+                      <View
+                        style={[
+                          styles.metricCard,
+                          {
+                            backgroundColor: colors.bgCard,
+                            borderColor: colors.borderSoft,
+                            ...colors.cardShadow,
+                          },
+                        ]}
+                      >
+                        <TotoroSticker type="spent" size={62} style={[styles.cardCornerSticker, { right: 4 }]} />
+                        <View style={styles.metricHeaderRow}>
+                          <View style={[styles.paperIconBadge, { backgroundColor: colors.dangerLight, borderColor: colors.dangerLight }]}>
+                            <Ionicons name="arrow-up-circle-outline" size={15} color={colors.danger} />
+                          </View>
+                          <View style={[styles.badgePill, { backgroundColor: colors.dangerLight, borderColor: colors.dangerLight }]}>
+                            <Text style={[styles.badgePillText, { color: colors.danger }]}>Spent</Text>
+                          </View>
+                        </View>
+                        <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Total Spent</Text>
+                        <Text style={[styles.metricValue, { color: colors.danger }]} numberOfLines={1} adjustsFontSizeToFit>
+                          {currencySymbol} {totalSpent.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                        </Text>
+                      </View>
+
+                      {/* Card 3: Total Income */}
+                      <TouchableOpacity
+                        activeOpacity={0.8}
+                        onPress={() => {
+                          setIncDate(getTodayDateStr());
+                          setIncAmount('');
+                          setIncNote('');
+                          setIsIncomeModalOpen(true);
+                        }}
+                        style={[
+                          styles.metricCard,
+                          {
+                            backgroundColor: colors.bgCard,
+                            borderColor: colors.borderSoft,
+                            ...colors.cardShadow,
+                          },
+                        ]}
+                      >
+                        <TotoroSticker type="leaf" size={62} style={styles.cardCornerSticker} />
+                        <View style={styles.metricHeaderRow}>
+                          <View style={[styles.paperIconBadge, { backgroundColor: colors.primaryGreenLight, borderColor: colors.primaryGreenLight }]}>
+                            <Ionicons name="arrow-down-circle-outline" size={15} color={colors.primaryGreen} />
+                          </View>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                            <View style={[styles.badgePill, { backgroundColor: colors.primaryGreenLight, borderColor: colors.primaryGreenLight }]}>
+                              <Text style={[styles.badgePillText, { color: colors.primaryGreen }]}>Inflow</Text>
+                            </View>
+                            <Ionicons name="add" size={13} color={colors.primaryGreen} />
+                          </View>
+                        </View>
+                        <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Total Income</Text>
+                        <Text style={[styles.metricValue, { color: colors.primaryGreen }]} numberOfLines={1} adjustsFontSizeToFit>
+                          {currencySymbol} {totalIncome.toLocaleString()}
+                        </Text>
+                      </TouchableOpacity>
+
+                      {/* Card 4: Total Net Worth */}
+                      <TouchableOpacity
+                        activeOpacity={0.8}
+                        onPress={() => router.push('/(tabs)/accounts')}
+                        style={[
+                          styles.metricCard,
+                          {
+                            backgroundColor: colors.bgCard,
+                            borderColor: colors.borderSoft,
+                            ...colors.cardShadow,
+                          },
+                        ]}
+                      >
+                        <TotoroSticker type="savings" size={62} style={[styles.cardCornerSticker, { right: 2 }]} />
+                        <View style={styles.metricHeaderRow}>
+                          <View style={[styles.paperIconBadge, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
+                            <Ionicons name="briefcase-outline" size={15} color={colors.textMain} />
+                          </View>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                            <TouchableOpacity
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                              onPress={(e) => {
+                                e?.stopPropagation?.();
+                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                togglePrivacyMask();
+                              }}
+                              style={[
+                                styles.badgePill,
+                                {
+                                  backgroundColor: colors.bgSecondary,
+                                  borderColor: colors.borderSoft,
+                                  paddingHorizontal: 6,
+                                  paddingVertical: 3,
+                                },
+                              ]}
+                            >
+                              <Ionicons
+                                name={isPrivacyMasked ? 'eye-off-outline' : 'eye-outline'}
+                                size={12}
+                                color={colors.textMain}
+                              />
+                            </TouchableOpacity>
+                            <View style={[styles.badgePill, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
+                              <Text style={[styles.badgePillText, { color: colors.textMain }]}>Vault</Text>
+                            </View>
+                          </View>
+                        </View>
+                        <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Total Net Worth</Text>
+                        <Text style={[styles.metricValue, { color: colors.textMain }]} numberOfLines={1} adjustsFontSizeToFit>
+                          {isPrivacyMasked
+                            ? `${currencySymbol} ••••••`
+                            : `${currencySymbol} ${totalNetWorth.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`}
+                        </Text>
+                        <Text
+                          style={{
+                            fontSize: 10,
+                            fontWeight: '500',
+                            marginTop: 3,
+                            color: colors.primaryGreen,
+                          }}
+                          numberOfLines={1}
+                        >
+                          All Accounts
+                        </Text>
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    <>
+                      {/* Card 1: Total Income */}
+                      <TouchableOpacity
+                        activeOpacity={0.8}
+                        onPress={() => {
+                          setIncDate(getTodayDateStr());
+                          setIncAmount('');
+                          setIncNote('');
+                          setIsIncomeModalOpen(true);
+                        }}
+                        style={[
+                          styles.metricCard,
+                          {
+                            backgroundColor: colors.bgCard,
+                            borderColor: colors.borderSoft,
+                            ...colors.cardShadow,
+                          },
+                        ]}
+                      >
+                        <TotoroSticker type="leaf" size={62} style={styles.cardCornerSticker} />
+                        <View style={styles.metricHeaderRow}>
+                          <View style={[styles.paperIconBadge, { backgroundColor: colors.primaryGreenLight, borderColor: colors.primaryGreenLight }]}>
+                            <Ionicons name="arrow-down-circle-outline" size={15} color={colors.primaryGreen} />
+                          </View>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                            <View style={[styles.badgePill, { backgroundColor: colors.primaryGreenLight, borderColor: colors.primaryGreenLight }]}>
+                              <Text style={[styles.badgePillText, { color: colors.primaryGreen }]}>Inflow</Text>
+                            </View>
+                            <Ionicons name="add" size={13} color={colors.primaryGreen} />
+                          </View>
+                        </View>
+                        <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Total Income</Text>
+                        <Text style={[styles.metricValue, { color: colors.primaryGreen }]} numberOfLines={1} adjustsFontSizeToFit>
+                          {currencySymbol} {totalIncome.toLocaleString()}
+                        </Text>
+                      </TouchableOpacity>
+
+                      {/* Card 2: Spent */}
+                      <View
+                        style={[
+                          styles.metricCard,
+                          {
+                            backgroundColor: colors.bgCard,
+                            borderColor: colors.borderSoft,
+                            ...colors.cardShadow,
+                          },
+                        ]}
+                      >
+                        <TotoroSticker type="spent" size={62} style={[styles.cardCornerSticker, { right: 4 }]} />
+                        <View style={styles.metricHeaderRow}>
+                          <View style={[styles.paperIconBadge, { backgroundColor: colors.dangerLight, borderColor: colors.dangerLight }]}>
+                            <Ionicons name="arrow-up-circle-outline" size={15} color={colors.danger} />
+                          </View>
+                          <View style={[styles.badgePill, { backgroundColor: colors.dangerLight, borderColor: colors.dangerLight }]}>
+                            <Text style={[styles.badgePillText, { color: colors.danger }]}>Spent</Text>
+                          </View>
+                        </View>
+                        <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Total Spent</Text>
+                        <Text style={[styles.metricValue, { color: colors.danger }]} numberOfLines={1} adjustsFontSizeToFit>
+                          {currencySymbol} {totalSpent.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                        </Text>
+                      </View>
+
+                      {/* Card 3: Total Net Worth */}
+                      <TouchableOpacity
+                        activeOpacity={0.8}
+                        onPress={() => router.push('/(tabs)/accounts')}
+                        style={[
+                          styles.metricCard,
+                          {
+                            backgroundColor: colors.bgCard,
+                            borderColor: colors.borderSoft,
+                            ...colors.cardShadow,
+                          },
+                        ]}
+                      >
+                        <TotoroSticker type="big" size={64} style={[styles.cardCornerSticker, { right: 2 }]} />
+                        <View style={styles.metricHeaderRow}>
+                          <View style={[styles.paperIconBadge, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
+                            <Ionicons name="briefcase-outline" size={15} color={colors.textMain} />
+                          </View>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                            <TouchableOpacity
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                              onPress={(e) => {
+                                e?.stopPropagation?.();
+                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                togglePrivacyMask();
+                              }}
+                              style={[
+                                styles.badgePill,
+                                {
+                                  backgroundColor: colors.bgSecondary,
+                                  borderColor: colors.borderSoft,
+                                  paddingHorizontal: 6,
+                                  paddingVertical: 3,
+                                },
+                              ]}
+                            >
+                              <Ionicons
+                                name={isPrivacyMasked ? 'eye-off-outline' : 'eye-outline'}
+                                size={12}
+                                color={colors.textMain}
+                              />
+                            </TouchableOpacity>
+                            <View style={[styles.badgePill, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
+                              <Text style={[styles.badgePillText, { color: colors.textMain }]}>Vault</Text>
+                            </View>
+                          </View>
+                        </View>
+                        <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Total Net Worth</Text>
+                        <Text style={[styles.metricValue, { color: colors.textMain }]} numberOfLines={1} adjustsFontSizeToFit>
+                          {isPrivacyMasked
+                            ? `${currencySymbol} ••••••`
+                            : `${currencySymbol} ${totalNetWorth.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`}
+                        </Text>
+                        <Text
+                          style={{
+                            fontSize: 10,
+                            fontWeight: '500',
+                            marginTop: 3,
+                            color: colors.primaryGreen,
+                          }}
+                          numberOfLines={1}
+                        >
+                          All Accounts
+                        </Text>
+                      </TouchableOpacity>
+
+                      {/* Card 4: Savings Rate */}
+                      <View
+                        style={[
+                          styles.metricCard,
+                          {
+                            backgroundColor: colors.bgCard,
+                            borderColor: colors.borderSoft,
+                            ...colors.cardShadow,
+                          },
+                        ]}
+                      >
+                        <TotoroSticker type="curious" size={42} style={styles.cardCornerSticker} />
+                        <View style={styles.metricHeaderRow}>
+                          <View style={[styles.paperIconBadge, { backgroundColor: colors.primaryGreenLight, borderColor: colors.primaryGreenLight }]}>
+                            <Ionicons name="trending-up-outline" size={15} color={colors.primaryGreen} />
+                          </View>
+                          <View style={[styles.badgePill, { backgroundColor: colors.primaryGreenLight, borderColor: colors.primaryGreenLight }]}>
+                            <Text style={[styles.badgePillText, { color: colors.primaryGreen }]}>Rate</Text>
+                          </View>
+                        </View>
+                        <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Savings Ratio</Text>
+                        <Text style={[styles.metricValue, { color: colors.primaryGreen }]} numberOfLines={1} adjustsFontSizeToFit>
+                          {totalIncome > 0 ? Math.max(0, Math.round(((totalIncome - totalSpent) / totalIncome) * 100)) + '%' : '0%'}
+                        </Text>
+                      </View>
+                    </>
+                  )}
+                </View>
+
+                {/* Quick Action Buttons */}
+                <View style={styles.actionButtonsRow}>
+                  {/* Add Expense */}
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={() => {
+                      setExpDate(getTodayDateStr());
+                      setExpAmount('');
+                      setExpReason('');
+                      setExpRecurringBillId('');
+                      setIsExpenseModalOpen(true);
+                    }}
+                    style={[
+                      styles.primaryActionBtn,
+                      { flex: 1, backgroundColor: colors.primaryAccent, ...colors.cardShadow },
+                    ]}
+                  >
+                    <Ionicons name="remove-circle" size={18} color={colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214')} />
+                    <Text
+                      style={[styles.primaryActionText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}
+                      numberOfLines={1}
+                    >
+                      Add Expense
+                    </Text>
+                  </TouchableOpacity>
+
+                  {/* Add Income */}
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={() => {
+                      setIncDate(getTodayDateStr());
+                      setIncAmount('');
+                      setIncNote('');
+                      setIsIncomeModalOpen(true);
+                    }}
+                    style={[
+                      styles.secondaryActionBtn,
+                      {
+                        flex: 1,
+                        backgroundColor: colors.bgCard,
+                        borderColor: 'transparent',
+                        borderWidth: 0,
+                        ...colors.cardShadow,
+                      },
+                    ]}
+                  >
+                    <Ionicons name="add-circle" size={18} color={colors.primaryGreen} />
+                    <Text
+                      style={[styles.secondaryActionText, { color: colors.textMain }]}
+                      numberOfLines={1}
+                    >
+                      Add Income
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* MONTHLY RECURRING & BILLS (Utilities, Rent, Groceries, etc.) */}
+                {showMonthlyBills && (
+                  <View style={[styles.envelopesCard, { backgroundColor: colors.bgCard, ...colors.cardShadow }]}>
+                    {/* Card Header */}
+                    <View style={styles.envelopeCardHeader}>
+                      <View style={styles.envelopeTitleContainer}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.envelopeHeaderTitle, { color: colors.textMain }]} numberOfLines={1}>
+                            MONTHLY RECURRING & BILLS
+                          </Text>
+                          <Text style={[styles.envelopeHeaderSub, { color: colors.textMuted }]} numberOfLines={1}>
+                            Utilities, Rent, Groceries
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.envelopeHeaderActions}>
+                        {/* View Mode Switcher Button */}
+                        <TouchableOpacity
+                          activeOpacity={0.7}
+                          onPress={() => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            setEnvelopeViewMode((prev) => (prev === 'table' ? 'progress' : 'table'));
+                          }}
+                          style={[styles.envelopeToggleBtn, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}
+                        >
+                          <Ionicons
+                            name={envelopeViewMode === 'table' ? 'bar-chart-outline' : 'list-outline'}
+                            size={14}
+                            color={colors.textMain}
+                          />
+                        </TouchableOpacity>
+
+                        {/* + Add Bill Button */}
+                        <TouchableOpacity
+                          activeOpacity={0.7}
+                          onPress={() => setIsAddEnvelopeModalOpen(true)}
+                          style={[styles.addCategoryPillBtn, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}
+                        >
+                          <Text style={[styles.addCategoryPillText, { color: colors.textMain }]} numberOfLines={1}>+ Add Bill</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+
+                    {envelopes.length === 0 ? (
+                      /* EMPTY BILLS STATE */
+                      <View style={styles.emptyEnvelopeBox}>
+                        <Text style={[styles.emptyEnvelopeTitle, { color: colors.textMain }]}>No Recurring Bills or Utilities Yet</Text>
+                        <Text style={[styles.emptyEnvelopeSub, { color: colors.textMuted }]}>
+                          Plan and track recurring monthly essentials like Electricity, Water, Rent, Groceries, and Wi-Fi. Set expected monthly amounts and track actual spending.
+                        </Text>
+                      </View>
+                    ) : envelopeViewMode === 'table' ? (
+                      /* TABLE VIEW */
+                      <View style={styles.envelopeTable}>
+                        {/* Table Column Headers */}
+                        <View style={[styles.tableHeaderRow, { backgroundColor: colors.bgSecondary }]}>
+                          <Text style={[styles.colHeaderCategory, { color: colors.textMuted }]}>
+                            RECURRING BILL / UTILITY
+                          </Text>
+                          <Text style={[styles.colHeaderBudgeted, { color: colors.textMuted }]}>
+                            MONTHLY BUDGET
+                          </Text>
+                        </View>
+
+                        {/* Envelope Rows */}
+                        {envelopeStats.map((env, idx) => (
+                          <TouchableOpacity
+                            key={env.id}
+                            activeOpacity={0.75}
+                            onPress={() => {
+                              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                              setSelectedEnvelopeForEdit(env);
+                              setEditEnvBudget(env.budgeted.toString());
+                              setIsEditEnvelopeModalOpen(true);
+                            }}
+                            style={[
+                              styles.tableRowItem,
+                              { borderBottomColor: 'rgba(0,0,0,0.05)' },
+                              idx === envelopeStats.length - 1 && { borderBottomWidth: 0 },
+                            ]}
+                          >
+                            <View style={styles.tableRowLeft}>
+                              <View style={[styles.catColorDot, { backgroundColor: env.color }]} />
+                              <Text style={styles.catEmojiText}>{env.emoji}</Text>
+                              <View style={{ flex: 1, marginRight: 6 }}>
+                                <Text
+                                  style={[styles.catNameText, { color: colors.textMain }]}
+                                  numberOfLines={1}
+                                >
+                                  {env.name.replace(env.emoji, '').trim() || env.name}
+                                </Text>
+                                <Text style={{ fontSize: 10, color: colors.textMuted, fontWeight: '600', marginTop: 1 }} numberOfLines={1}>
+                                  Spent: {currencySymbol} {env.spent.toFixed(2)} ({env.percent}%)
+                                </Text>
+                              </View>
+                            </View>
+                            <View style={{ alignItems: 'flex-end', minWidth: 90 }}>
+                              <Text style={[styles.catBudgetText, { color: colors.textMain }]} numberOfLines={1} adjustsFontSizeToFit>
+                                {currencySymbol} {env.budgeted.toFixed(2)}
+                              </Text>
+                              <Text style={{ fontSize: 10, color: env.remaining > 0 ? colors.primaryGreen : colors.danger, fontWeight: '700', marginTop: 1 }} numberOfLines={1}>
+                                {env.remaining > 0 ? `Left: ${currencySymbol} ${env.remaining.toFixed(2)}` : 'Limit reached'}
+                              </Text>
+                            </View>
+                          </TouchableOpacity>
+                        ))}
+
+                        {/* TOTAL Highlight Row */}
+                        <View style={[styles.tableTotalRow, { backgroundColor: colors.bgSecondary }]}>
+                          <Text style={[styles.totalLabelText, { color: colors.textMain }]}>TOTAL MONTHLY BUDGET</Text>
+                          <Text style={[styles.totalValueText, { color: colors.textMain }]} numberOfLines={1} adjustsFontSizeToFit>
+                            {currencySymbol} {totalEnvelopesBudgeted.toFixed(2)}
+                          </Text>
+                        </View>
+                      </View>
+                    ) : (
+                      /* PROGRESS VIEW: Spent vs Budget Bar Tracker */
+                      <View style={styles.envelopesList}>
+                        {envelopeStats.map((item) => (
+                          <TouchableOpacity
+                            key={item.id}
+                            activeOpacity={0.75}
+                            onPress={() => {
+                              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                              setSelectedEnvelopeForEdit(item);
+                              setEditEnvBudget(item.budgeted.toString());
+                              setIsEditEnvelopeModalOpen(true);
+                            }}
+                            style={styles.envelopeItem}
+                          >
+                            <View style={styles.envelopeTopRow}>
+                              <View style={styles.envelopeTitleWrapper}>
+                                <View style={[styles.colorDot, { backgroundColor: item.color }]} />
+                                <Text style={[styles.envelopeName, { color: colors.textMain }]}>{item.name}</Text>
+                              </View>
+                              <Text style={[styles.envelopeAmount, { color: colors.textMuted }]}>
+                                {currencySymbol} {item.spent.toFixed(2)} / <Text style={{ color: colors.textMain, fontWeight: '700' }}>{currencySymbol} {item.budgeted.toFixed(2)}</Text>
+                              </Text>
+                            </View>
+
+                            {/* Progress Bar */}
+                            <View style={[styles.progressBarBg, { backgroundColor: colors.bgSecondary }]}>
+                              <View
+                                style={[
+                                  styles.progressBarFill,
+                                  {
+                                    width: `${Math.min(100, item.percent)}%`,
+                                    backgroundColor: item.percent > 90 ? colors.danger : item.color,
+                                  },
+                                ]}
+                              />
+                            </View>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                )}
+
+                {/* Recent Expenses List */}
+                <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, ...colors.cardShadow }]}>
+                  <View style={styles.sectionHeaderRow}>
+                    <Text style={[styles.sectionTitle, { color: colors.textMain }]}>Recent Expenses</Text>
+                    <Text style={[styles.countBadge, { color: colors.textMuted }]}>{filteredExpenses.length} total</Text>
+                  </View>
+
+                  {filteredExpenses.length === 0 ? (
+                    <View style={styles.emptyEnvelopeBox}>
+                      <Text style={[styles.emptyEnvelopeTitle, { color: colors.textMain }]}>No Expenses Recorded</Text>
+                      <Text style={[styles.emptyEnvelopeSub, { color: colors.textMuted }]}>
+                        Tap &ldquo;Add Expense&rdquo; above to record an outflow for this period.
+                      </Text>
+                    </View>
+                  ) : (
+                    <View style={styles.transactionList}>
+                      {filteredExpenses.map((exp) => {
+                        const linkedBill = exp.recurringBillId ? envelopes.find((b) => b.id === exp.recurringBillId) : null;
+                        const isDebtLent = exp.id.startsWith('debt_lent_');
+                        const isDebtRepaid = exp.id.startsWith('debt_repay_exp_');
+                        const isWishlist = exp.category.toLowerCase().includes('wishlist');
+                        const catEmoji = isDebtLent ? '🤝' : isDebtRepaid ? '💸' : (isWishlist ? '🎁' : getCategoryEmoji(exp.category));
+                        const rawCat = isWishlist ? 'Wishlist' : isDebtLent ? 'Money Lent' : isDebtRepaid ? 'Debt Repaid' : exp.category;
+                        const badgeCategoryText = cleanCategoryName(rawCat) || rawCat;
+                        return (
+                          <View key={exp.id} style={[styles.txItem, { borderBottomColor: 'rgba(0,0,0,0.05)' }]}>
+                            <View style={styles.txLeft}>
+                              <View style={[styles.txEmojiCircle, { backgroundColor: colors.bgSecondary }]}>
+                                <Text style={styles.txEmoji}>{catEmoji}</Text>
+                              </View>
+                              <View style={styles.txInfo}>
+                                <Text style={[styles.txTitle, { color: colors.textMain }]} numberOfLines={1}>{exp.reason}</Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
+                                  <Text style={[styles.txSub, { color: colors.textMuted, marginTop: 0 }]}>
+                                    {exp.date} • {exp.stored}
+                                  </Text>
+                                  {/* Category Badge - No Emoji */}
+                                  <View style={[styles.badgePill, { backgroundColor: colors.bgSecondary, paddingVertical: 1 }]}>
+                                    <Text style={{ fontSize: 10, color: colors.textMain, fontWeight: '700' }} numberOfLines={1}>
+                                      {badgeCategoryText}
+                                    </Text>
+                                  </View>
+                                  {linkedBill && (
+                                    <View style={[styles.badgePill, { backgroundColor: colors.bgSecondary, paddingVertical: 1 }]}>
+                                      <Text style={{ fontSize: 10, color: colors.textMain, fontWeight: '700' }} numberOfLines={1}>
+                                        {cleanCategoryName(linkedBill.name) || linkedBill.name}
+                                      </Text>
+                                    </View>
+                                  )}
+                                </View>
+                              </View>
+                            </View>
+                            <Text style={[styles.txExpenseAmount, { color: colors.danger }]} numberOfLines={1} adjustsFontSizeToFit>
+                              -{currencySymbol} {exp.amount.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                            </Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  )}
+                </View>
+
+                {/* Income Streams List */}
+                <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, ...colors.cardShadow }]}>
+                  <View style={styles.sectionHeaderRow}>
+                    <Text style={[styles.sectionTitle, { color: colors.textMain }]}>Income Streams</Text>
+                    <Text style={[styles.countBadge, { color: colors.textMuted }]}>{filteredIncomes.length} items</Text>
+                  </View>
+
+                  {filteredIncomes.length === 0 ? (
+                    <View style={styles.emptyEnvelopeBox}>
+                      <Text style={[styles.emptyEnvelopeTitle, { color: colors.textMain }]}>No Additional Income</Text>
+                      <Text style={[styles.emptyEnvelopeSub, { color: colors.textMuted }]}>
+                        Tap &ldquo;Add Income&rdquo; above to record freelance, bonus, or investment returns.
+                      </Text>
+                    </View>
+                  ) : (
+                    <View style={styles.transactionList}>
+                      {filteredIncomes.map((inc) => {
+                        const isDebtBorrowed = inc.id.startsWith('debt_borrowed_');
+                        const isDebtRepay = inc.id.startsWith('debt_repay_inc_');
+                        const incEmoji = isDebtBorrowed ? '💰' : isDebtRepay ? '🤝' : '👛';
+                        return (
+                          <View key={inc.id} style={[styles.txItem, { borderBottomColor: 'rgba(0,0,0,0.05)' }]}>
+                            <View style={styles.txLeft}>
+                              <View style={styles.txInfo}>
+                                <Text style={[styles.txTitle, { color: colors.textMain }]} numberOfLines={1}>{inc.note}</Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
+                                  <Text style={[styles.txSub, { color: colors.textMuted, marginTop: 0 }]}>
+                                    {inc.date} • {inc.stored}
+                                  </Text>
+                                  {isDebtBorrowed && (
+                                    <View style={[styles.badgePill, { backgroundColor: colors.bgSecondary, paddingVertical: 1 }]}>
+                                      <Text style={{ fontSize: 10, color: colors.primaryGreen, fontWeight: '700' }} numberOfLines={1}>
+                                        Money Borrowed
+                                      </Text>
+                                    </View>
+                                  )}
+                                  {isDebtRepay && (
+                                    <View style={[styles.badgePill, { backgroundColor: colors.bgSecondary, paddingVertical: 1 }]}>
+                                      <Text style={{ fontSize: 10, color: colors.primaryGreen, fontWeight: '700' }} numberOfLines={1}>
+                                        Repayment Received
+                                      </Text>
+                                    </View>
+                                  )}
+                                </View>
+                              </View>
+                            </View>
+                            <Text style={[styles.txIncomeAmount, { color: colors.primaryGreen }]} numberOfLines={1} adjustsFontSizeToFit>
+                              +{currencySymbol} {inc.amount.toLocaleString()}
+                            </Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  )}
+                </View>
+              </View>
+            )}
+
+            {/* ===================== VIEW 2: CALENDAR ===================== */}
+            {activeSegment === 'calendar' && (
+              <View style={styles.viewContainer}>
+                <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, ...colors.cardShadow }]}>
+                  <View style={styles.calendarNavRow}>
+                    <TouchableOpacity
+                      onPress={handlePrevCalMonth}
+                      style={styles.calNavBtn}
+                    >
+                      <Ionicons name="chevron-back" size={20} color={colors.textMain} />
+                    </TouchableOpacity>
+                    <Text style={[styles.calMonthTitle, { color: colors.textMain }]}>{currentMonthName}</Text>
+                    <TouchableOpacity onPress={handleNextCalMonth} style={styles.calNavBtn}>
+                      <Ionicons name="chevron-forward" size={20} color={colors.textMain} />
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Day headers */}
+                  <View style={styles.calDaysHeader}>
+                    {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((d, i) => (
+                      <Text key={i} style={[styles.calDayHeadText, { color: colors.textMuted }]}>
+                        {d}
+                      </Text>
+                    ))}
+                  </View>
+
+                  {/* Grid */}
+                  <View style={styles.calGrid}>
+                    {/* Blank Padding Cells for Month Alignment */}
+                    {Array.from({ length: firstDayOffset }).map((_, i) => (
+                      <View key={`cal-blank-${i}`} style={styles.calDayCell} />
+                    ))}
+
+                    {/* Days 1 .. N */}
+                    {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
+                      const nowObj = new Date();
+                      const isToday =
+                        day === nowObj.getDate() &&
+                        selectedMonthIndex === nowObj.getMonth() &&
+                        selectedMonthYear === nowObj.getFullYear();
+                      const isSelected = selectedDay === day;
+                      const hasActivity = daysWithActivity.has(day);
+                      const hasSalary = daysWithSalary.has(day);
+                      const hasIncome = daysWithIncome.has(day);
+                      const hasExpense = daysWithExpense.has(day);
+
+                      let bgColor = 'transparent';
+                      let borderColor = 'transparent';
+                      let textColor = colors.textMain;
+                      let borderWidth = 0;
+
+                      if (isSelected && isToday) {
+                        bgColor = colors.primaryAccent;
+                        borderColor = colors.primaryGreen;
+                        borderWidth = 2.5;
+                        textColor = colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214');
+                      } else if (isSelected) {
+                        bgColor = colors.primaryAccent;
+                        borderColor = colors.primaryAccent;
+                        borderWidth = 1;
+                        textColor = colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214');
+                      } else if (isToday) {
+                        bgColor = colors.primaryGreen;
+                        borderColor = colors.primaryGreen;
+                        borderWidth = 1;
+                        textColor = colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214');
+                      }
+
+                      return (
+                        <TouchableOpacity
+                          key={day}
+                          activeOpacity={0.7}
+                          onPress={() => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            setSelectedDay(day);
+                          }}
+                          style={[
+                            styles.calDayCell,
                             {
-                              color: textColor,
-                              fontWeight: isSelected || isToday ? '800' : '600',
+                              backgroundColor: bgColor,
+                              borderColor: borderColor,
+                              borderWidth: borderWidth,
+                              borderRadius: 12,
                             },
                           ]}
                         >
-                          {day}
-                        </Text>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 2, marginTop: 2 }}>
-                          {hasSalary ? (
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 1 }}>
-                              <Text style={{ fontSize: 9 }}>💼</Text>
+                          <Text
+                            style={[
+                              styles.calDayNumber,
+                              {
+                                color: textColor,
+                                fontWeight: isSelected || isToday ? '800' : '600',
+                              },
+                            ]}
+                          >
+                            {day}
+                          </Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 2, marginTop: 2 }}>
+                            {hasSalary ? (
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 1 }}>
+                                <Text style={{ fontSize: 9 }}>💼</Text>
+                                <View
+                                  style={[
+                                    styles.calExpenseDot,
+                                    {
+                                      marginTop: 0,
+                                      backgroundColor: isSelected || isToday
+                                        ? (colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214'))
+                                        : colors.primaryGreen,
+                                    },
+                                  ]}
+                                />
+                              </View>
+                            ) : hasIncome ? (
                               <View
                                 style={[
                                   styles.calExpenseDot,
@@ -1548,317 +1635,495 @@ export default function HomeScreen() {
                                   },
                                 ]}
                               />
-                            </View>
-                          ) : hasIncome ? (
-                            <View
-                              style={[
-                                styles.calExpenseDot,
-                                {
-                                  marginTop: 0,
-                                  backgroundColor: isSelected || isToday
-                                    ? (colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214'))
-                                    : colors.primaryGreen,
-                                },
-                              ]}
-                            />
-                          ) : null}
-                          {hasExpense && (
-                            <View
-                              style={[
-                                styles.calExpenseDot,
-                                {
-                                  marginTop: 0,
-                                  backgroundColor: isSelected || isToday
-                                    ? (colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214'))
-                                    : colors.danger,
-                                },
-                              ]}
-                            />
-                          )}
-                        </View>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-
-                {/* Calendar Legend */}
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 14, marginTop: 12, paddingVertical: 4 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                    <Text style={{ fontSize: 11 }}>💼</Text>
-                    <Text style={{ fontSize: 11, color: colors.textMuted, fontWeight: '700' }}>Salary</Text>
-                  </View>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                    <View style={[styles.calExpenseDot, { backgroundColor: colors.primaryGreen, marginTop: 0 }]} />
-                    <Text style={{ fontSize: 11, color: colors.textMuted, fontWeight: '700' }}>Income</Text>
-                  </View>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                    <View style={[styles.calExpenseDot, { backgroundColor: colors.danger, marginTop: 0 }]} />
-                    <Text style={{ fontSize: 11, color: colors.textMuted, fontWeight: '700' }}>Expense</Text>
-                  </View>
-                </View>
-              </View>
-
-              {/* Selected Day Log */}
-              <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, ...colors.cardShadow }]}>
-                <Text style={[styles.sectionTitle, { color: colors.textMain, marginBottom: 12 }]}>
-                  Transactions for Day {selectedDay} 🗓️
-                </Text>
-
-                {dayExpenses.length === 0 && dayIncomes.length === 0 ? (
-                  <Text style={{ fontSize: 13, color: colors.textMuted, fontStyle: 'italic', paddingVertical: 8 }}>
-                    No transactions recorded on this day.
-                  </Text>
-                ) : (
-                  <>
-                    {dayIncomes.map((inc) => {
-                      const isSalary = inc.note.toLowerCase().includes('monthly base salary');
-                      return (
-                        <View key={inc.id} style={[styles.txItem, { borderBottomColor: 'rgba(0,0,0,0.05)' }]}>
-                          <View style={styles.txLeft}>
-                            <View style={[styles.txEmojiCircle, { backgroundColor: colors.bgSecondary }]}>
-                              <Text style={styles.txEmoji}>{isSalary ? '💼' : '👛'}</Text>
-                            </View>
-                            <View style={styles.txInfo}>
-                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                                <Text style={[styles.txTitle, { color: colors.textMain }]}>{inc.note}</Text>
-                                {isSalary && (
-                                  <Text
-                                    style={[
-                                      styles.badgePill,
-                                      {
-                                        backgroundColor: colors.primaryGreenLight,
-                                        color: colors.primaryGreen,
-                                      },
-                                    ]}
-                                  >
-                                    Salary Loaded ✨
-                                  </Text>
-                                )}
-                              </View>
-                              <Text style={[styles.txSub, { color: colors.textMuted }]}>{inc.date} • {inc.stored}</Text>
-                            </View>
+                            ) : null}
+                            {hasExpense && (
+                              <View
+                                style={[
+                                  styles.calExpenseDot,
+                                  {
+                                    marginTop: 0,
+                                    backgroundColor: isSelected || isToday
+                                      ? (colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214'))
+                                      : colors.danger,
+                                  },
+                                ]}
+                              />
+                            )}
                           </View>
-                          <Text style={[styles.txIncomeAmount, { color: colors.primaryGreen }]} numberOfLines={1} adjustsFontSizeToFit>
-                            +{currencySymbol} {inc.amount.toLocaleString()}
-                          </Text>
-                        </View>
+                        </TouchableOpacity>
                       );
                     })}
+                  </View>
 
-                    {dayExpenses.map((e) => {
-                      const linkedBill = e.recurringBillId ? envelopes.find((b) => b.id === e.recurringBillId) : null;
-                      const catEmoji = getCategoryEmoji(e.category);
-                      const catTotal = categorySpentMap.get(e.category.trim().toLowerCase()) || e.amount;
-                      return (
-                        <View key={e.id} style={[styles.txItem, { borderBottomColor: 'rgba(0,0,0,0.05)' }]}>
-                          <View style={styles.txLeft}>
-                            <View style={[styles.txEmojiCircle, { backgroundColor: colors.bgSecondary }]}>
-                              <Text style={styles.txEmoji}>{catEmoji}</Text>
-                            </View>
-                            <View style={styles.txInfo}>
-                              <Text style={[styles.txTitle, { color: colors.textMain }]} numberOfLines={1}>{e.reason}</Text>
-                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
-                                <Text style={[styles.txSub, { color: colors.textMuted, marginTop: 0 }]}>{e.date} • {e.stored}</Text>
-                                {/* Category Spent Badge */}
-                                <View style={[styles.badgePill, { backgroundColor: colors.bgSecondary, paddingVertical: 1 }]}>
-                                  <Text style={{ fontSize: 10, color: colors.textMain, fontWeight: '700' }} numberOfLines={1}>
-                                    {catEmoji} {e.category} ({currencySymbol} {catTotal.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} total)
-                                  </Text>
+                  {/* Calendar Legend */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 14, marginTop: 12, paddingVertical: 4 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <Text style={{ fontSize: 11 }}>💼</Text>
+                      <Text style={{ fontSize: 11, color: colors.textMuted, fontWeight: '700' }}>Salary</Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <View style={[styles.calExpenseDot, { backgroundColor: colors.primaryGreen, marginTop: 0 }]} />
+                      <Text style={{ fontSize: 11, color: colors.textMuted, fontWeight: '700' }}>Income</Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <View style={[styles.calExpenseDot, { backgroundColor: colors.danger, marginTop: 0 }]} />
+                      <Text style={{ fontSize: 11, color: colors.textMuted, fontWeight: '700' }}>Expense</Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Selected Day Log */}
+                <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, ...colors.cardShadow }]}>
+                  <Text style={[styles.sectionTitle, { color: colors.textMain, marginBottom: 12 }]}>
+                    Transactions for Day {selectedDay} 🗓️
+                  </Text>
+
+                  {dayExpenses.length === 0 && dayIncomes.length === 0 ? (
+                    <Text style={{ fontSize: 13, color: colors.textMuted, fontStyle: 'italic', paddingVertical: 8 }}>
+                      No transactions recorded on this day.
+                    </Text>
+                  ) : (
+                    <>
+                      {dayIncomes.map((inc) => {
+                        const isSalary = inc.note.toLowerCase().includes('monthly base salary');
+                        const isDebtBorrowed = inc.id.startsWith('debt_borrowed_');
+                        const isDebtRepay = inc.id.startsWith('debt_repay_inc_');
+                        const incEmoji = isSalary ? '💼' : isDebtBorrowed ? '💰' : isDebtRepay ? '🤝' : '👛';
+                        return (
+                          <View key={inc.id} style={[styles.txItem, { borderBottomColor: 'rgba(0,0,0,0.05)' }]}>
+                            <View style={styles.txLeft}>
+                              <View style={styles.txInfo}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                  <Text style={[styles.txTitle, { color: colors.textMain }]}>{inc.note}</Text>
+                                  {isSalary && (
+                                    <Text
+                                      style={[
+                                        styles.badgePill,
+                                        {
+                                          backgroundColor: colors.primaryGreenLight,
+                                          color: colors.primaryGreen,
+                                        },
+                                      ]}
+                                    >
+                                      Salary Loaded ✨
+                                    </Text>
+                                  )}
+                                  {isDebtBorrowed && (
+                                    <View style={[styles.badgePill, { backgroundColor: colors.bgSecondary, paddingVertical: 1 }]}>
+                                      <Text style={{ fontSize: 10, color: colors.primaryGreen, fontWeight: '700' }} numberOfLines={1}>
+                                        Money Borrowed
+                                      </Text>
+                                    </View>
+                                  )}
+                                  {isDebtRepay && (
+                                    <View style={[styles.badgePill, { backgroundColor: colors.bgSecondary, paddingVertical: 1 }]}>
+                                      <Text style={{ fontSize: 10, color: colors.primaryGreen, fontWeight: '700' }} numberOfLines={1}>
+                                        Repayment Received
+                                      </Text>
+                                    </View>
+                                  )}
                                 </View>
-                                {linkedBill && (
+                                <Text style={[styles.txSub, { color: colors.textMuted }]}>{inc.date} • {inc.stored}</Text>
+                              </View>
+                            </View>
+                            <Text style={[styles.txIncomeAmount, { color: colors.primaryGreen }]} numberOfLines={1} adjustsFontSizeToFit>
+                              +{currencySymbol} {inc.amount.toLocaleString()}
+                            </Text>
+                          </View>
+                        );
+                      })}
+
+                      {dayExpenses.map((e) => {
+                        const linkedBill = e.recurringBillId ? envelopes.find((b) => b.id === e.recurringBillId) : null;
+                        const isDebtLent = e.id.startsWith('debt_lent_');
+                        const isDebtRepaid = e.id.startsWith('debt_repay_exp_');
+                        const isWishlist = e.category.toLowerCase().includes('wishlist');
+                        const catEmoji = isDebtLent ? '🤝' : isDebtRepaid ? '💸' : (isWishlist ? '🎁' : getCategoryEmoji(e.category));
+                        const rawCat = isWishlist ? 'Wishlist' : isDebtLent ? 'Money Lent' : isDebtRepaid ? 'Debt Repaid' : e.category;
+                        const badgeCategoryText = cleanCategoryName(rawCat) || rawCat;
+                        return (
+                          <View key={e.id} style={[styles.txItem, { borderBottomColor: 'rgba(0,0,0,0.05)' }]}>
+                            <View style={styles.txLeft}>
+                              <View style={[styles.txEmojiCircle, { backgroundColor: colors.bgSecondary }]}>
+                                <Text style={styles.txEmoji}>{catEmoji}</Text>
+                              </View>
+                              <View style={styles.txInfo}>
+                                <Text style={[styles.txTitle, { color: colors.textMain }]} numberOfLines={1}>{e.reason}</Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
+                                  <Text style={[styles.txSub, { color: colors.textMuted, marginTop: 0 }]}>{e.date} • {e.stored}</Text>
+                                  {/* Category Badge - No Emoji */}
                                   <View style={[styles.badgePill, { backgroundColor: colors.bgSecondary, paddingVertical: 1 }]}>
                                     <Text style={{ fontSize: 10, color: colors.textMain, fontWeight: '700' }} numberOfLines={1}>
-                                      {linkedBill.emoji} {linkedBill.name}
+                                      {badgeCategoryText}
                                     </Text>
                                   </View>
-                                )}
+                                  {linkedBill && (
+                                    <View style={[styles.badgePill, { backgroundColor: colors.bgSecondary, paddingVertical: 1 }]}>
+                                      <Text style={{ fontSize: 10, color: colors.textMain, fontWeight: '700' }} numberOfLines={1}>
+                                        {cleanCategoryName(linkedBill.name) || linkedBill.name}
+                                      </Text>
+                                    </View>
+                                  )}
+                                </View>
                               </View>
                             </View>
+                            <Text style={[styles.txExpenseAmount, { color: colors.danger }]} numberOfLines={1} adjustsFontSizeToFit>
+                              -{currencySymbol} {e.amount.toLocaleString()}
+                            </Text>
                           </View>
-                          <Text style={[styles.txExpenseAmount, { color: colors.danger }]} numberOfLines={1} adjustsFontSizeToFit>
-                            -{currencySymbol} {e.amount.toLocaleString()}
-                          </Text>
-                        </View>
-                      );
-                    })}
-                  </>
-                )}
-              </View>
-            </View>
-          )}
-
-          {/* ===================== VIEW 3: ANALYTICS ===================== */}
-          {activeSegment === 'analytics' && (
-            <View style={styles.viewContainer}>
-              {/* Category Breakdown Rings/Bars */}
-              <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, ...colors.cardShadow }]}>
-                <Text style={[styles.sectionTitle, { color: colors.textMain }]}>Spending Breakdown 🍩</Text>
-                <Text style={[styles.sectionSubtitle, { color: colors.textMuted, marginBottom: 16 }]}>
-                  Share of monthly budget by category
-                </Text>
-
-                {categoryStats.map((cat) => (
-                  <View key={cat.id} style={styles.analyticsBarRow}>
-                    <View style={styles.analyticsBarInfo}>
-                      <Text style={[styles.analyticsCatName, { color: colors.textMain }]}>{cat.name}</Text>
-                      <Text style={[styles.analyticsCatVal, { color: colors.textMuted }]}>
-                        {currencySymbol} {cat.spent.toLocaleString()} ({cat.percent}%)
-                      </Text>
-                    </View>
-                    <View style={[styles.progressBarBg, { backgroundColor: colors.bgSecondary }]}>
-                      <View style={[styles.progressBarFill, { width: `${cat.percent}%`, backgroundColor: cat.color }]} />
-                    </View>
-                  </View>
-                ))}
-              </View>
-
-              {/* Income vs Outflow Comparison */}
-              <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, ...colors.cardShadow }]}>
-                <Text style={[styles.sectionTitle, { color: colors.textMain }]}>Inflow vs Outflow 📊</Text>
-                <Text style={[styles.sectionSubtitle, { color: colors.textMuted, marginBottom: 16 }]}>
-                  Net monthly cash balance
-                </Text>
-
-                <View style={styles.comparisonContainer}>
-                  {/* Inflow Bar */}
-                  <View style={styles.compareCol}>
-                    <View style={[styles.compareBar, { height: 120, backgroundColor: colors.primaryGreen }]} />
-                    <Text style={[styles.compareLabel, { color: colors.textMain }]}>Inflow</Text>
-                    <Text style={[styles.compareAmount, { color: colors.primaryGreen }]}>
-                      {currencySymbol} {totalIncome.toLocaleString()}
-                    </Text>
-                  </View>
-
-                  {/* Outflow Bar */}
-                  <View style={styles.compareCol}>
-                    <View
-                      style={[
-                        styles.compareBar,
-                        {
-                          height: Math.min(120, Math.max(20, (totalSpent / (totalIncome || 1)) * 120)),
-                          backgroundColor: colors.danger,
-                        },
-                      ]}
-                    />
-                    <Text style={[styles.compareLabel, { color: colors.textMain }]}>Outflow</Text>
-                    <Text style={[styles.compareAmount, { color: colors.danger }]}>
-                      {currencySymbol} {totalSpent.toLocaleString()}
-                    </Text>
-                  </View>
+                        );
+                      })}
+                    </>
+                  )}
                 </View>
               </View>
-              {/* Bottom Totoro Parade */}
+            )}
+
+            {/* ===================== VIEW 3: ANALYTICS ===================== */}
+            {activeSegment === 'analytics' && (
+              <View style={styles.viewContainer}>
+                {/* Category Breakdown Rings/Bars */}
+                <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, ...colors.cardShadow }]}>
+                  <Text style={[styles.sectionTitle, { color: colors.textMain }]}>Spending Breakdown 🍩</Text>
+                  <Text style={[styles.sectionSubtitle, { color: colors.textMuted, marginBottom: 16 }]}>
+                    Share of monthly budget by category
+                  </Text>
+
+                  {categoryStats.map((cat) => (
+                    <View key={cat.id} style={styles.analyticsBarRow}>
+                      <View style={styles.analyticsBarInfo}>
+                        <Text style={[styles.analyticsCatName, { color: colors.textMain }]}>{cat.name}</Text>
+                        <Text style={[styles.analyticsCatVal, { color: colors.textMuted }]}>
+                          {currencySymbol} {cat.spent.toLocaleString()} ({cat.percent}%)
+                        </Text>
+                      </View>
+                      <View style={[styles.progressBarBg, { backgroundColor: colors.bgSecondary }]}>
+                        <View style={[styles.progressBarFill, { width: `${cat.percent}%`, backgroundColor: cat.color }]} />
+                      </View>
+                    </View>
+                  ))}
+                </View>
+
+                {/* Income vs Outflow Comparison */}
+                <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, ...colors.cardShadow }]}>
+                  <Text style={[styles.sectionTitle, { color: colors.textMain }]}>Inflow vs Outflow 📊</Text>
+                  <Text style={[styles.sectionSubtitle, { color: colors.textMuted, marginBottom: 16 }]}>
+                    Net monthly cash balance
+                  </Text>
+
+                  <View style={styles.comparisonContainer}>
+                    {/* Inflow Bar */}
+                    <View style={styles.compareCol}>
+                      <View style={[styles.compareBar, { height: 120, backgroundColor: colors.primaryGreen }]} />
+                      <Text style={[styles.compareLabel, { color: colors.textMain }]}>Inflow</Text>
+                      <Text style={[styles.compareAmount, { color: colors.primaryGreen }]}>
+                        {currencySymbol} {totalIncome.toLocaleString()}
+                      </Text>
+                    </View>
+
+                    {/* Outflow Bar */}
+                    <View style={styles.compareCol}>
+                      <View
+                        style={[
+                          styles.compareBar,
+                          {
+                            height: Math.min(120, Math.max(20, (totalSpent / (totalIncome || 1)) * 120)),
+                            backgroundColor: colors.danger,
+                          },
+                        ]}
+                      />
+                      <Text style={[styles.compareLabel, { color: colors.textMain }]}>Outflow</Text>
+                      <Text style={[styles.compareAmount, { color: colors.danger }]}>
+                        {currencySymbol} {totalSpent.toLocaleString()}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+                {/* Bottom Totoro Parade */}
                 <View style={styles.dashboardParade}>
                   <TotoroSticker type="parade" height={64} />
-                  <Text style={[styles.totoroParadeCaption, { color: colors.textMuted, marginTop: 6 }]}>🐾 ~ Walking with Totoro ~ 🐾</Text>
+                  <Text style={[styles.totoroParadeCaption, { color: colors.textMuted, marginTop: 6 }]}>🐾~  ~🐾</Text>
                 </View>
               </View>
             )}
           </ScrollView>
-      </>
+        </>
 
-      {/* ===================== MODAL 1: ADD EXPENSE ===================== */}
-      <AestheticModal
-        visible={isExpenseModalOpen}
-        onClose={handleCloseExpenseModal}
-        title="Add Expense"
-        subtitle="Log a new outgoing transaction"
-        icon="💸"
-      >
-        <View style={styles.formGroup}>
-          <Text style={[styles.inputLabel, { color: colors.textMain }]}>Amount ({currencySymbol})</Text>
-          <TextInput
-            style={[styles.input, { backgroundColor: colors.bgSecondary, color: colors.textMain, borderColor: colors.borderSoft }]}
-            placeholder="e.g. 250"
-            placeholderTextColor={colors.textSubtle}
-            keyboardType="numeric"
-            value={expAmount}
-            onChangeText={setExpAmount}
-          />
-        </View>
-
-        <View style={styles.formGroup}>
-          <Text style={[styles.inputLabel, { color: colors.textMain }]}>Category</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
-            {categories.map((c) => {
-              const isSelected = expCategory === c.name;
-              return (
-                <TouchableOpacity
-                  key={c.id}
-                  onPress={() => setExpCategory(c.name)}
-                  style={[
-                    styles.choiceChip,
-                    {
-                      backgroundColor: isSelected ? colors.primaryAccent : colors.bgSecondary,
-                      borderColor: 'transparent',
-                      borderWidth: 0,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.choiceChipText,
-                      {
-                        color: isSelected ? (colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214')) : colors.textMuted,
-                        fontWeight: isSelected ? '800' : '600',
-                      },
-                    ]}
-                  >
-                    {c.name}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </View>
-
-        {/* Optional Link to Recurring Bill / Utility */}
-        {showMonthlyBills && envelopes.length > 0 && (
+        {/* ===================== MODAL 1: ADD EXPENSE ===================== */}
+        <AestheticModal
+          visible={isExpenseModalOpen}
+          onClose={handleCloseExpenseModal}
+          title="Add Expense"
+          subtitle="Log a new outgoing transaction"
+          icon="💸"
+        >
           <View style={styles.formGroup}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-              <Text style={[styles.inputLabel, { color: colors.textMain, marginBottom: 0 }]}>
-                Connect to Recurring Bill ⚡
-              </Text>
-              <Text style={{ fontSize: 11, color: colors.textMuted, fontWeight: '600' }}>
-                Optional
-              </Text>
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
-              <TouchableOpacity
-                onPress={() => setExpRecurringBillId('')}
-                style={[
-                  styles.choiceChip,
-                  {
-                    backgroundColor: !expRecurringBillId ? colors.primaryAccent : colors.bgSecondary,
-                    borderWidth: 0,
-                    borderColor: 'transparent',
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.choiceChipText,
-                    {
-                      color: !expRecurringBillId ? (colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214')) : colors.textMuted,
-                      fontWeight: !expRecurringBillId ? '800' : '600',
-                    },
-                  ]}
+            <Text style={[styles.inputLabel, { color: colors.textMain }]}>Amount ({currencySymbol})</Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: colors.bgSecondary, color: colors.textMain, borderColor: colors.borderSoft }]}
+              placeholder="e.g. 250"
+              placeholderTextColor={colors.textSubtle}
+              keyboardType="numeric"
+              value={expAmount}
+              onChangeText={setExpAmount}
+            />
+          </View>
+
+          {/* Category OR Recurring Bill Selection (Mutually Exclusive) */}
+          <View style={styles.formGroup}>
+            {showMonthlyBills && envelopes.length > 0 ? (
+              <>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    backgroundColor: colors.bgSecondary,
+                    borderRadius: 12,
+                    padding: 3,
+                    marginBottom: 10,
+                  }}
                 >
-                  🚫 None (Standard)
-                </Text>
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={() => {
+                      setExpMode('category');
+                      setExpRecurringBillId('');
+                    }}
+                    style={{
+                      flex: 1,
+                      paddingVertical: 7,
+                      borderRadius: 9,
+                      alignItems: 'center',
+                      backgroundColor: expMode === 'category' ? colors.primaryAccent : 'transparent',
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        fontWeight: '700',
+                        color:
+                          expMode === 'category'
+                            ? (colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214'))
+                            : colors.textMuted,
+                      }}
+                    >
+                      🏷️ Category
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={() => {
+                      setExpMode('bill');
+                      if (!expRecurringBillId && envelopes.length > 0) {
+                        setExpRecurringBillId(envelopes[0].id);
+                      }
+                    }}
+                    style={{
+                      flex: 1,
+                      paddingVertical: 7,
+                      borderRadius: 9,
+                      alignItems: 'center',
+                      backgroundColor: expMode === 'bill' ? colors.primaryAccent : 'transparent',
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        fontWeight: '700',
+                        color:
+                          expMode === 'bill'
+                            ? (colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214'))
+                            : colors.textMuted,
+                      }}
+                    >
+                      ⚡ Recurring Bill
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {expMode === 'category' ? (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
+                    {categories.map((c) => {
+                      const isSelected = expCategory === c.name;
+                      return (
+                        <TouchableOpacity
+                          key={c.id}
+                          onPress={() => setExpCategory(c.name)}
+                          style={[
+                            styles.choiceChip,
+                            {
+                              backgroundColor: isSelected ? colors.primaryAccent : colors.bgSecondary,
+                              borderColor: 'transparent',
+                              borderWidth: 0,
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.choiceChipText,
+                              {
+                                color: isSelected
+                                  ? (colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214'))
+                                  : colors.textMuted,
+                                fontWeight: isSelected ? '800' : '600',
+                              },
+                            ]}
+                          >
+                            {c.name}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                ) : (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
+                    {envelopes.map((bill) => {
+                      const isSelected = expRecurringBillId === bill.id;
+                      return (
+                        <TouchableOpacity
+                          key={bill.id}
+                          onPress={() => setExpRecurringBillId(bill.id)}
+                          style={[
+                            styles.choiceChip,
+                            {
+                              backgroundColor: isSelected ? colors.primaryAccent : colors.bgSecondary,
+                              borderWidth: 0,
+                              borderColor: 'transparent',
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.choiceChipText,
+                              {
+                                color: isSelected
+                                  ? (colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214'))
+                                  : colors.textMuted,
+                                fontWeight: isSelected ? '800' : '600',
+                              },
+                            ]}
+                          >
+                            {bill.emoji} {bill.name}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                )}
+              </>
+            ) : (
+              <>
+                <Text style={[styles.inputLabel, { color: colors.textMain }]}>Category</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
+                  {categories.map((c) => {
+                    const isSelected = expCategory === c.name;
+                    return (
+                      <TouchableOpacity
+                        key={c.id}
+                        onPress={() => setExpCategory(c.name)}
+                        style={[
+                          styles.choiceChip,
+                          {
+                            backgroundColor: isSelected ? colors.primaryAccent : colors.bgSecondary,
+                            borderColor: 'transparent',
+                            borderWidth: 0,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.choiceChipText,
+                            {
+                              color: isSelected
+                                ? (colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214'))
+                                : colors.textMuted,
+                              fontWeight: isSelected ? '800' : '600',
+                            },
+                          ]}
+                        >
+                          {c.name}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </>
+            )}
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text style={[styles.inputLabel, { color: colors.textMain }]}>Reason / Note</Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: colors.bgSecondary, color: colors.textMain, borderColor: colors.borderSoft }]}
+              placeholder="e.g. Lunch at Cafe"
+              placeholderTextColor={colors.textSubtle}
+              value={expReason}
+              onChangeText={setExpReason}
+            />
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text style={[styles.inputLabel, { color: colors.textMain }]}>Date (Defaults to Today)</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <TextInput
+                style={[styles.input, { flex: 1, backgroundColor: colors.bgSecondary, color: colors.textMain, borderColor: colors.borderSoft }]}
+                placeholder="e.g. 15 Jul 2026 or 2026-07-15"
+                placeholderTextColor={colors.textSubtle}
+                value={expDate}
+                onChangeText={setExpDate}
+              />
+              <TouchableOpacity
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  if (isDatePickerOpen && datePickerTarget === 'expense') {
+                    setIsDatePickerOpen(false);
+                  } else {
+                    setDatePickerTarget('expense');
+                    setIsDatePickerOpen(true);
+                  }
+                }}
+                activeOpacity={0.7}
+                style={{
+                  padding: 12,
+                  borderRadius: 14,
+                  backgroundColor: isDatePickerOpen && datePickerTarget === 'expense' ? colors.primaryAccent : colors.bgSecondary,
+                }}
+              >
+                <Ionicons
+                  name="calendar-outline"
+                  size={20}
+                  color={isDatePickerOpen && datePickerTarget === 'expense' ? (colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214')) : colors.primaryAccent}
+                />
               </TouchableOpacity>
-              {envelopes.map((bill) => {
-                const isSelected = expRecurringBillId === bill.id;
+            </View>
+
+            {/* Inline Calendar Picker */}
+            {isDatePickerOpen && datePickerTarget === 'expense' && (
+              <View style={{ marginTop: 10 }}>
+                <CalendarPicker
+                  currentValue={expDate}
+                  onSelectDate={(formattedDate) => setExpDate(formattedDate)}
+                  onClose={() => setIsDatePickerOpen(false)}
+                />
+              </View>
+            )}
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text style={[styles.inputLabel, { color: colors.textMain }]}>Paid From Account</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
+              {accounts.map((acc) => {
+                const isSelected = expAccount === acc.name;
                 return (
                   <TouchableOpacity
-                    key={bill.id}
-                    onPress={() => setExpRecurringBillId(bill.id)}
+                    key={acc.id}
+                    onPress={() => setExpAccount(acc.name)}
                     style={[
                       styles.choiceChip,
                       {
                         backgroundColor: isSelected ? colors.primaryAccent : colors.bgSecondary,
-                        borderWidth: 0,
                         borderColor: 'transparent',
+                        borderWidth: 0,
                       },
                     ]}
                   >
@@ -1871,534 +2136,476 @@ export default function HomeScreen() {
                         },
                       ]}
                     >
-                      {bill.emoji} {bill.name}
+                      {acc.emoji} {acc.name}
                     </Text>
                   </TouchableOpacity>
                 );
               })}
             </ScrollView>
           </View>
-        )}
 
-        <View style={styles.formGroup}>
-          <Text style={[styles.inputLabel, { color: colors.textMain }]}>Reason / Note</Text>
-          <TextInput
-            style={[styles.input, { backgroundColor: colors.bgSecondary, color: colors.textMain, borderColor: colors.borderSoft }]}
-            placeholder="e.g. Lunch at Cafe"
-            placeholderTextColor={colors.textSubtle}
-            value={expReason}
-            onChangeText={setExpReason}
-          />
-        </View>
+          <TouchableOpacity
+            onPress={handleAddExpenseSubmit}
+            style={[styles.submitButton, { backgroundColor: colors.primaryAccent }]}
+          >
+            <Text style={[styles.submitButtonText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}>
+              Save Expense 💸
+            </Text>
+          </TouchableOpacity>
+        </AestheticModal>
 
-        <View style={styles.formGroup}>
-          <Text style={[styles.inputLabel, { color: colors.textMain }]}>Date (Defaults to Today)</Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <TextInput
-              style={[styles.input, { flex: 1, backgroundColor: colors.bgSecondary, color: colors.textMain, borderColor: colors.borderSoft }]}
-              placeholder="e.g. 15 Jul 2026 or 2026-07-15"
-              placeholderTextColor={colors.textSubtle}
-              value={expDate}
-              onChangeText={setExpDate}
-            />
-            <TouchableOpacity
-              onPress={() => {
-                setDatePickerTarget('expense');
-                setIsDatePickerOpen(true);
-              }}
-              style={{ padding: 12, borderRadius: 14, backgroundColor: colors.bgSecondary,  }}
-            >
-              <Ionicons name="calendar-outline" size={20} color={colors.primaryAccent} />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <View style={styles.formGroup}>
-          <Text style={[styles.inputLabel, { color: colors.textMain }]}>Paid From Account</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
-            {accounts.map((acc) => {
-              const isSelected = expAccount === acc.name;
-              return (
-                <TouchableOpacity
-                  key={acc.id}
-                  onPress={() => setExpAccount(acc.name)}
-                  style={[
-                    styles.choiceChip,
-                    {
-                      backgroundColor: isSelected ? colors.primaryAccent : colors.bgSecondary,
-                      borderColor: 'transparent',
-                      borderWidth: 0,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.choiceChipText,
-                      {
-                        color: isSelected ? (colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214')) : colors.textMuted,
-                        fontWeight: isSelected ? '800' : '600',
-                      },
-                    ]}
-                  >
-                    {acc.emoji} {acc.name}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </View>
-
-        <TouchableOpacity
-          onPress={handleAddExpenseSubmit}
-          style={[styles.submitButton, { backgroundColor: colors.primaryAccent }]}
+        {/* ===================== MODAL 2: ADD INCOME ===================== */}
+        <AestheticModal
+          visible={isIncomeModalOpen}
+          onClose={handleCloseIncomeModal}
+          title="Add Income"
+          subtitle="Log additional incoming funds"
+          icon="💰"
         >
-          <Text style={[styles.submitButtonText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}>
-            Save Expense 💸
-          </Text>
-        </TouchableOpacity>
-      </AestheticModal>
-
-      {/* ===================== MODAL 2: ADD INCOME ===================== */}
-      <AestheticModal
-        visible={isIncomeModalOpen}
-        onClose={handleCloseIncomeModal}
-        title="Add Income"
-        subtitle="Log additional incoming funds"
-        icon="💰"
-      >
-        <View style={styles.formGroup}>
-          <Text style={[styles.inputLabel, { color: colors.textMain }]}>Amount ({currencySymbol})</Text>
-          <TextInput
-            style={[styles.input, { backgroundColor: colors.bgSecondary, color: colors.textMain, borderColor: colors.borderSoft }]}
-            placeholder="e.g. 15000"
-            placeholderTextColor={colors.textSubtle}
-            keyboardType="numeric"
-            value={incAmount}
-            onChangeText={setIncAmount}
-          />
-        </View>
-
-        <View style={styles.formGroup}>
-          <Text style={[styles.inputLabel, { color: colors.textMain }]}>Income Title / Source</Text>
-          <TextInput
-            style={[styles.input, { backgroundColor: colors.bgSecondary, color: colors.textMain, borderColor: colors.borderSoft }]}
-            placeholder="e.g. Freelance Design Bonus"
-            placeholderTextColor={colors.textSubtle}
-            value={incNote}
-            onChangeText={setIncNote}
-          />
-        </View>
-
-        <View style={styles.formGroup}>
-          <Text style={[styles.inputLabel, { color: colors.textMain }]}>Date (Defaults to Today)</Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View style={styles.formGroup}>
+            <Text style={[styles.inputLabel, { color: colors.textMain }]}>Amount ({currencySymbol})</Text>
             <TextInput
-              style={[styles.input, { flex: 1, backgroundColor: colors.bgSecondary, color: colors.textMain, borderColor: colors.borderSoft }]}
-              placeholder="e.g. 15 Jul 2026 or 2026-07-15"
+              style={[styles.input, { backgroundColor: colors.bgSecondary, color: colors.textMain, borderColor: colors.borderSoft }]}
+              placeholder="e.g. 15000"
               placeholderTextColor={colors.textSubtle}
-              value={incDate}
-              onChangeText={setIncDate}
+              keyboardType="numeric"
+              value={incAmount}
+              onChangeText={setIncAmount}
             />
-            <TouchableOpacity
-              onPress={() => {
-                setDatePickerTarget('income');
-                setIsDatePickerOpen(true);
-              }}
-              style={{ padding: 12, borderRadius: 14, backgroundColor: colors.bgSecondary,  }}
-            >
-              <Ionicons name="calendar-outline" size={20} color={colors.primaryGreen} />
-            </TouchableOpacity>
           </View>
-        </View>
 
-        <View style={styles.formGroup}>
-          <Text style={[styles.inputLabel, { color: colors.textMain }]}>Deposited Into Account</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
-            {accounts.map((acc) => {
-              const isSelected = incAccount === acc.name;
-              return (
-                <TouchableOpacity
-                  key={acc.id}
-                  onPress={() => setIncAccount(acc.name)}
-                  style={[
-                    styles.choiceChip,
-                    {
-                      backgroundColor: isSelected ? colors.primaryAccent : colors.bgSecondary,
-                      borderColor: 'transparent',
-                      borderWidth: 0,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.choiceChipText,
-                      {
-                        color: isSelected
-                          ? (colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214'))
-                          : colors.textMuted,
-                        fontWeight: isSelected ? '800' : '600',
-                      },
-                    ]}
-                  >
-                    {acc.emoji} {acc.name}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </View>
+          <View style={styles.formGroup}>
+            <Text style={[styles.inputLabel, { color: colors.textMain }]}>Income Title / Source</Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: colors.bgSecondary, color: colors.textMain, borderColor: colors.borderSoft }]}
+              placeholder="e.g. Freelance Design Bonus"
+              placeholderTextColor={colors.textSubtle}
+              value={incNote}
+              onChangeText={setIncNote}
+            />
+          </View>
 
-        <TouchableOpacity
-          onPress={handleAddIncomeSubmit}
-          style={[styles.submitButton, { backgroundColor: colors.primaryAccent }]}
-        >
-          <Text style={[styles.submitButtonText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}>
-            Save Income 💰
-          </Text>
-        </TouchableOpacity>
-      </AestheticModal>
-
-      {/* ===================== MODAL 3: ADD RECURRING MONTHLY BILL ===================== */}
-      <AestheticModal
-        visible={isAddEnvelopeModalOpen}
-        onClose={() => setIsAddEnvelopeModalOpen(false)}
-        title="Add Recurring Bill / Utility ⚡"
-        subtitle="Set monthly budget for recurring essentials (Electricity, Water, Rent, etc.)"
-        icon="⚡"
-      >
-        {/* Quick Suggestion Chips */}
-        <View style={styles.formGroup}>
-          <Text style={[styles.inputLabel, { color: colors.textMain }]}>Quick Suggestions (Tap to fill)</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
-            {RECURRING_BILL_SUGGESTIONS.map((item, i) => (
+          <View style={styles.formGroup}>
+            <Text style={[styles.inputLabel, { color: colors.textMain }]}>Date (Defaults to Today)</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <TextInput
+                style={[styles.input, { flex: 1, backgroundColor: colors.bgSecondary, color: colors.textMain, borderColor: colors.borderSoft }]}
+                placeholder="e.g. 15 Jul 2026 or 2026-07-15"
+                placeholderTextColor={colors.textSubtle}
+                value={incDate}
+                onChangeText={setIncDate}
+              />
               <TouchableOpacity
-                key={i}
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setEnvName(item.name);
-                  setEnvEmoji(item.emoji);
-                  setEnvColor(item.color);
+                  if (isDatePickerOpen && datePickerTarget === 'income') {
+                    setIsDatePickerOpen(false);
+                  } else {
+                    setDatePickerTarget('income');
+                    setIsDatePickerOpen(true);
+                  }
                 }}
-                style={[
-                  styles.suggestionChip,
-                  {
-                    backgroundColor: envName === item.name ? colors.primaryAccent : colors.bgSecondary,
-                    borderColor: envName === item.name ? colors.primaryAccent : colors.borderSoft,
-                  },
-                ]}
+                activeOpacity={0.7}
+                style={{
+                  padding: 12,
+                  borderRadius: 14,
+                  backgroundColor: isDatePickerOpen && datePickerTarget === 'income' ? colors.primaryGreen : colors.bgSecondary,
+                }}
               >
-                <Text style={{ fontSize: 13, marginRight: 5 }}>{item.emoji}</Text>
-                <Text
-                  style={{
-                    fontSize: 12,
-                    fontWeight: '700',
-                    color: envName === item.name ? colors.textOnAccent : colors.textMain,
-                  }}
-                >
-                  {item.name}
-                </Text>
+                <Ionicons
+                  name="calendar-outline"
+                  size={20}
+                  color={isDatePickerOpen && datePickerTarget === 'income' ? '#ffffff' : colors.primaryGreen}
+                />
               </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
+            </View>
 
-        <View style={styles.formGroup}>
-          <Text style={[styles.inputLabel, { color: colors.textMain }]}>Bill / Utility Name</Text>
-          <TextInput
-            style={[styles.input, { backgroundColor: colors.bgSecondary, color: colors.textMain, borderColor: colors.borderSoft }]}
-            placeholder="e.g. Electricity Bill, House Rent, Groceries"
-            placeholderTextColor={colors.textSubtle}
-            value={envName}
-            onChangeText={setEnvName}
-          />
-        </View>
-
-        <View style={styles.formGroup}>
-          <Text style={[styles.inputLabel, { color: colors.textMain }]}>Icon Emoji</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
-            {emojiList.map((em, i) => (
-              <TouchableOpacity
-                key={i}
-                onPress={() => setEnvEmoji(em)}
-                style={[
-                  styles.emojiChip,
-                  { backgroundColor: envEmoji === em ? colors.primaryAccent : colors.bgSecondary },
-                ]}
-              >
-                <Text style={styles.emojiText}>{em}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-
-        <View style={styles.formGroup}>
-          <Text style={[styles.inputLabel, { color: colors.textMain }]}>Color Tag</Text>
-          <View style={styles.swatchGrid}>
-            {colorSwatches.map((color, i) => (
-              <TouchableOpacity
-                key={i}
-                onPress={() => setEnvColor(color)}
-                style={[
-                  styles.swatchDot,
-                  { backgroundColor: color },
-                  envColor === color && styles.swatchDotSelected,
-                ]}
-              />
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.formGroup}>
-          <Text style={[styles.inputLabel, { color: colors.textMain }]}>Expected Monthly Amount ({currencySymbol})</Text>
-          <TextInput
-            style={[styles.input, { backgroundColor: colors.bgSecondary, color: colors.textMain, borderColor: colors.borderSoft }]}
-            placeholder="e.g. 1500"
-            placeholderTextColor={colors.textSubtle}
-            keyboardType="numeric"
-            value={envBudget}
-            onChangeText={setEnvBudget}
-          />
-        </View>
-
-        <TouchableOpacity
-          onPress={handleAddEnvelopeSubmit}
-          style={[styles.submitButton, { backgroundColor: colors.primaryAccent }]}
-        >
-          <Text style={[styles.submitButtonText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}>
-            Save Recurring Bill 🌿
-          </Text>
-        </TouchableOpacity>
-      </AestheticModal>
-
-      {/* ===================== MODAL 4: EDIT RECURRING BILL BUDGET ===================== */}
-      <AestheticModal
-        visible={isEditEnvelopeModalOpen && selectedEnvelopeForEdit !== null}
-        onClose={() => {
-          setIsEditEnvelopeModalOpen(false);
-          setSelectedEnvelopeForEdit(null);
-        }}
-        title="Edit Recurring Bill Budget"
-        subtitle={`Set expected monthly amount for ${selectedEnvelopeForEdit?.name}`}
-        icon={selectedEnvelopeForEdit?.emoji || '⚡'}
-      >
-        <View style={styles.formGroup}>
-          <Text style={[styles.inputLabel, { color: colors.textMain }]}>Expected Monthly Amount ({currencySymbol})</Text>
-          <TextInput
-            style={[styles.input, { backgroundColor: colors.bgSecondary, color: colors.textMain, borderColor: colors.borderSoft }]}
-            placeholder="e.g. 1500"
-            placeholderTextColor={colors.textSubtle}
-            keyboardType="numeric"
-            value={editEnvBudget}
-            onChangeText={setEditEnvBudget}
-          />
-        </View>
-
-        <TouchableOpacity
-          onPress={handleUpdateEnvelopeSubmit}
-          style={[styles.submitButton, { backgroundColor: colors.primaryAccent }]}
-        >
-          <Text style={[styles.submitButtonText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}>
-            Save Monthly Budget 💾
-          </Text>
-        </TouchableOpacity>
-
-        {selectedEnvelopeForEdit && (
-          <TouchableOpacity
-            onPress={() => handleDeleteEnvelopeSubmit(selectedEnvelopeForEdit?.id)}
-            style={[styles.deleteCategoryBtn, { borderColor: colors.dangerLight }]}
-          >
-            <Text style={[styles.deleteCategoryText, { color: colors.danger }]}>Delete Recurring Bill 🗑️</Text>
-          </TouchableOpacity>
-        )}
-      </AestheticModal>
-
-      {/* ===================== MODAL 5: ADD EXPENSE CATEGORY TAG ===================== */}
-      <AestheticModal
-        visible={isCategoryModalOpen}
-        onClose={() => setIsCategoryModalOpen(false)}
-        title="Add Category Tag"
-        subtitle="Create a new category tag for expenses"
-        icon="🏷️"
-      >
-        <View style={styles.formGroup}>
-          <Text style={[styles.inputLabel, { color: colors.textMain }]}>Category Name</Text>
-          <TextInput
-            style={[styles.input, { backgroundColor: colors.bgSecondary, color: colors.textMain, borderColor: colors.borderSoft }]}
-            placeholder="e.g. Gaming, Gym, Subscriptions"
-            placeholderTextColor={colors.textSubtle}
-            value={catName}
-            onChangeText={setCatName}
-          />
-        </View>
-
-        <View style={styles.formGroup}>
-          <Text style={[styles.inputLabel, { color: colors.textMain }]}>Select Icon Emoji</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
-            {emojiList.map((em, i) => (
-              <TouchableOpacity
-                key={i}
-                onPress={() => setCatEmoji(em)}
-                style={[
-                  styles.emojiChip,
-                  { backgroundColor: catEmoji === em ? colors.primaryAccent : colors.bgSecondary },
-                ]}
-              >
-                <Text style={styles.emojiText}>{em}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-
-        <View style={styles.formGroup}>
-          <Text style={[styles.inputLabel, { color: colors.textMain }]}>Category Color Swatch</Text>
-          <View style={styles.swatchGrid}>
-            {colorSwatches.map((color, i) => (
-              <TouchableOpacity
-                key={i}
-                onPress={() => setCatColor(color)}
-                style={[
-                  styles.swatchDot,
-                  { backgroundColor: color },
-                  catColor === color && styles.swatchDotSelected,
-                ]}
-              />
-            ))}
-          </View>
-        </View>
-
-        <TouchableOpacity
-          onPress={handleAddCategorySubmit}
-          style={[styles.submitButton, { backgroundColor: colors.primaryAccent }]}
-        >
-          <Text style={[styles.submitButtonText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}>
-            Create Category Tag 🏷️
-          </Text>
-        </TouchableOpacity>
-
-        {/* Existing category tags */}
-        <View style={{ marginTop: 14 }}>
-          <Text style={[styles.inputLabel, { color: colors.textMuted, fontSize: 12 }]}>Existing Category Tags (Tap ✕ to remove)</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
-            {categories.map((c) => (
-              <View
-                key={c.id}
-                style={[
-                  styles.choiceChip,
-                  { backgroundColor: colors.bgSecondary, flexDirection: 'row', alignItems: 'center', gap: 6 },
-                ]}
-              >
-                <Text style={[styles.choiceChipText, { color: colors.textMain }]}>
-                  {c.emoji} {c.name}
-                </Text>
-                {categories.length > 1 && (
-                  <TouchableOpacity
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      deleteCategory(c.id);
-                    }}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Ionicons name="close-circle" size={16} color={colors.danger} />
-                  </TouchableOpacity>
-                )}
+            {/* Inline Calendar Picker */}
+            {isDatePickerOpen && datePickerTarget === 'income' && (
+              <View style={{ marginTop: 10 }}>
+                <CalendarPicker
+                  currentValue={incDate}
+                  onSelectDate={(formattedDate) => setIncDate(formattedDate)}
+                  onClose={() => setIsDatePickerOpen(false)}
+                />
               </View>
-            ))}
-          </ScrollView>
-        </View>
-      </AestheticModal>
-
-      {/* Previous Month Notice Popup for Calendar Navigation */}
-      <AestheticModal
-        visible={Boolean(pendingPrevCalMonth)}
-        onClose={() => setPendingPrevCalMonth(null)}
-        title="Previous Month Notice"
-        subtitle="Tracking history notice"
-        icon="🗓️"
-      >
-        <View style={{ paddingVertical: 4 }}>
-          <Text style={{ fontSize: 13, lineHeight: 19, color: colors.textMuted, marginBottom: 18 }}>
-            You started using this app in{' '}
-            <Text style={{ fontWeight: '800', color: colors.textMain }}>
-              {MONTH_NAMES_FULL[new Date().getMonth()]} {new Date().getFullYear()}
-            </Text>
-            . Navigating to previous month records may show empty budget or unloaded salary.
-          </Text>
-          <View style={{ flexDirection: 'row', gap: 10 }}>
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={() => setPendingPrevCalMonth(null)}
-              style={{
-                flex: 1,
-                paddingVertical: 12,
-                borderRadius: 14,
-                backgroundColor: colors.bgSecondary,
-                borderColor: 'transparent',
-                borderWidth: 0,
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textMain }}>Stay on Current</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={() => {
-                if (pendingPrevCalMonth) {
-                  const [py, pm] = pendingPrevCalMonth.split('-');
-                  const maxDays = new Date(parseInt(py, 10), parseInt(pm, 10), 0).getDate();
-                  setSelectedDay((cur) => Math.min(cur, maxDays));
-                  setSelectedMonth(pendingPrevCalMonth);
-                }
-                setPendingPrevCalMonth(null);
-              }}
-              style={{
-                flex: 1.2,
-                paddingVertical: 12,
-                borderRadius: 14,
-                backgroundColor: colors.primaryAccent,
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Text style={{ fontSize: 13, fontWeight: '800', color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }}>
-                View Month ➡️
-              </Text>
-            </TouchableOpacity>
+            )}
           </View>
-        </View>
-      </AestheticModal>
 
-      {/* ===================== MODAL 6: BASE SALARY / EDIT SETUP (RS & EMAIL) ===================== */}
-      <BaseSalarySetupModal
-        visible={isSalaryModalOpen}
-        onClose={() => setIsSalaryModalOpen(false)}
-        onSaveSalary={async (amount, dayStr) => {
-          await configureBaseSalary(amount, dayStr);
-          setIsSalaryModalOpen(false);
-        }}
-        onSkipSalary={async () => {
-          await skipBaseSalary();
-          setIsSalaryModalOpen(false);
-        }}
-        initialSalary={salary}
-        initialDay={baseSalaryDate}
-        forceConfigureStep={true}
-      />
+          <View style={styles.formGroup}>
+            <Text style={[styles.inputLabel, { color: colors.textMain }]}>Deposited Into Account</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
+              {accounts.map((acc) => {
+                const isSelected = incAccount === acc.name;
+                return (
+                  <TouchableOpacity
+                    key={acc.id}
+                    onPress={() => setIncAccount(acc.name)}
+                    style={[
+                      styles.choiceChip,
+                      {
+                        backgroundColor: isSelected ? colors.primaryAccent : colors.bgSecondary,
+                        borderColor: 'transparent',
+                        borderWidth: 0,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.choiceChipText,
+                        {
+                          color: isSelected
+                            ? (colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214'))
+                            : colors.textMuted,
+                          fontWeight: isSelected ? '800' : '600',
+                        },
+                      ]}
+                    >
+                      {acc.emoji} {acc.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
 
-      {/* Date Picker Selector Modal */}
-      <DatePickerFieldModal
-        visible={isDatePickerOpen}
-        onClose={() => setIsDatePickerOpen(false)}
-        currentValue={datePickerTarget === 'expense' ? expDate : incDate}
-        onSelectDate={(formattedDate) => {
-          if (datePickerTarget === 'expense') {
-            setExpDate(formattedDate);
-          } else {
-            setIncDate(formattedDate);
-          }
-        }}
-      />
-    </ImageBackground>
+          <TouchableOpacity
+            onPress={handleAddIncomeSubmit}
+            style={[styles.submitButton, { backgroundColor: colors.primaryAccent }]}
+          >
+            <Text style={[styles.submitButtonText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}>
+              Save Income 💰
+            </Text>
+          </TouchableOpacity>
+        </AestheticModal>
+
+        {/* ===================== MODAL 3: ADD RECURRING MONTHLY BILL ===================== */}
+        <AestheticModal
+          visible={isAddEnvelopeModalOpen}
+          onClose={() => setIsAddEnvelopeModalOpen(false)}
+          title="Add Recurring Bill / Utility ⚡"
+          subtitle="Set monthly budget for recurring essentials (Electricity, Water, Rent, etc.)"
+          icon="⚡"
+        >
+          {/* Quick Suggestion Chips */}
+          <View style={styles.formGroup}>
+            <Text style={[styles.inputLabel, { color: colors.textMain }]}>Quick Suggestions (Tap to fill)</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
+              {RECURRING_BILL_SUGGESTIONS.map((item, i) => (
+                <TouchableOpacity
+                  key={i}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setEnvName(item.name);
+                    setEnvEmoji(item.emoji);
+                    setEnvColor(item.color);
+                  }}
+                  style={[
+                    styles.suggestionChip,
+                    {
+                      backgroundColor: envName === item.name ? colors.primaryAccent : colors.bgSecondary,
+                      borderColor: envName === item.name ? colors.primaryAccent : colors.borderSoft,
+                    },
+                  ]}
+                >
+                  <Text style={{ fontSize: 13, marginRight: 5 }}>{item.emoji}</Text>
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      fontWeight: '700',
+                      color: envName === item.name ? colors.textOnAccent : colors.textMain,
+                    }}
+                  >
+                    {item.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text style={[styles.inputLabel, { color: colors.textMain }]}>Bill / Utility Name</Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: colors.bgSecondary, color: colors.textMain, borderColor: colors.borderSoft }]}
+              placeholder="e.g. Electricity Bill, House Rent, Groceries"
+              placeholderTextColor={colors.textSubtle}
+              value={envName}
+              onChangeText={setEnvName}
+            />
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text style={[styles.inputLabel, { color: colors.textMain }]}>Icon Emoji</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
+              {emojiList.map((em, i) => (
+                <TouchableOpacity
+                  key={i}
+                  onPress={() => setEnvEmoji(em)}
+                  style={[
+                    styles.emojiChip,
+                    { backgroundColor: envEmoji === em ? colors.primaryAccent : colors.bgSecondary },
+                  ]}
+                >
+                  <Text style={styles.emojiText}>{em}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text style={[styles.inputLabel, { color: colors.textMain }]}>Color Tag</Text>
+            <View style={styles.swatchGrid}>
+              {colorSwatches.map((color, i) => (
+                <TouchableOpacity
+                  key={i}
+                  onPress={() => setEnvColor(color)}
+                  style={[
+                    styles.swatchDot,
+                    { backgroundColor: color },
+                    envColor === color && styles.swatchDotSelected,
+                  ]}
+                />
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text style={[styles.inputLabel, { color: colors.textMain }]}>Expected Monthly Amount ({currencySymbol})</Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: colors.bgSecondary, color: colors.textMain, borderColor: colors.borderSoft }]}
+              placeholder="e.g. 1500"
+              placeholderTextColor={colors.textSubtle}
+              keyboardType="numeric"
+              value={envBudget}
+              onChangeText={setEnvBudget}
+            />
+          </View>
+
+          <TouchableOpacity
+            onPress={handleAddEnvelopeSubmit}
+            style={[styles.submitButton, { backgroundColor: colors.primaryAccent }]}
+          >
+            <Text style={[styles.submitButtonText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}>
+              Save Recurring Bill 🌿
+            </Text>
+          </TouchableOpacity>
+        </AestheticModal>
+
+        {/* ===================== MODAL 4: EDIT RECURRING BILL BUDGET ===================== */}
+        <AestheticModal
+          visible={isEditEnvelopeModalOpen && selectedEnvelopeForEdit !== null}
+          onClose={() => {
+            setIsEditEnvelopeModalOpen(false);
+            setSelectedEnvelopeForEdit(null);
+          }}
+          title="Edit Recurring Bill Budget"
+          subtitle={`Set expected monthly amount for ${selectedEnvelopeForEdit?.name}`}
+          icon={selectedEnvelopeForEdit?.emoji || '⚡'}
+        >
+          <View style={styles.formGroup}>
+            <Text style={[styles.inputLabel, { color: colors.textMain }]}>Expected Monthly Amount ({currencySymbol})</Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: colors.bgSecondary, color: colors.textMain, borderColor: colors.borderSoft }]}
+              placeholder="e.g. 1500"
+              placeholderTextColor={colors.textSubtle}
+              keyboardType="numeric"
+              value={editEnvBudget}
+              onChangeText={setEditEnvBudget}
+            />
+          </View>
+
+          <TouchableOpacity
+            onPress={handleUpdateEnvelopeSubmit}
+            style={[styles.submitButton, { backgroundColor: colors.primaryAccent }]}
+          >
+            <Text style={[styles.submitButtonText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}>
+              Save Monthly Budget 💾
+            </Text>
+          </TouchableOpacity>
+
+          {selectedEnvelopeForEdit && (
+            <TouchableOpacity
+              onPress={() => handleDeleteEnvelopeSubmit(selectedEnvelopeForEdit?.id)}
+              style={[styles.deleteCategoryBtn, { borderColor: colors.dangerLight }]}
+            >
+              <Text style={[styles.deleteCategoryText, { color: colors.danger }]}>Delete Recurring Bill 🗑️</Text>
+            </TouchableOpacity>
+          )}
+        </AestheticModal>
+
+        {/* ===================== MODAL 5: ADD EXPENSE CATEGORY TAG ===================== */}
+        <AestheticModal
+          visible={isCategoryModalOpen}
+          onClose={() => setIsCategoryModalOpen(false)}
+          title="Add Category Tag"
+          subtitle="Create a new category tag for expenses"
+          icon="🏷️"
+        >
+          <View style={styles.formGroup}>
+            <Text style={[styles.inputLabel, { color: colors.textMain }]}>Category Name</Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: colors.bgSecondary, color: colors.textMain, borderColor: colors.borderSoft }]}
+              placeholder="e.g. Gaming, Gym, Subscriptions"
+              placeholderTextColor={colors.textSubtle}
+              value={catName}
+              onChangeText={setCatName}
+            />
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text style={[styles.inputLabel, { color: colors.textMain }]}>Select Icon Emoji</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
+              {emojiList.map((em, i) => (
+                <TouchableOpacity
+                  key={i}
+                  onPress={() => setCatEmoji(em)}
+                  style={[
+                    styles.emojiChip,
+                    { backgroundColor: catEmoji === em ? colors.primaryAccent : colors.bgSecondary },
+                  ]}
+                >
+                  <Text style={styles.emojiText}>{em}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text style={[styles.inputLabel, { color: colors.textMain }]}>Category Color Swatch</Text>
+            <View style={styles.swatchGrid}>
+              {colorSwatches.map((color, i) => (
+                <TouchableOpacity
+                  key={i}
+                  onPress={() => setCatColor(color)}
+                  style={[
+                    styles.swatchDot,
+                    { backgroundColor: color },
+                    catColor === color && styles.swatchDotSelected,
+                  ]}
+                />
+              ))}
+            </View>
+          </View>
+
+          <TouchableOpacity
+            onPress={handleAddCategorySubmit}
+            style={[styles.submitButton, { backgroundColor: colors.primaryAccent }]}
+          >
+            <Text style={[styles.submitButtonText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}>
+              Create Category Tag 🏷️
+            </Text>
+          </TouchableOpacity>
+
+          {/* Existing category tags */}
+          <View style={{ marginTop: 14 }}>
+            <Text style={[styles.inputLabel, { color: colors.textMuted, fontSize: 12 }]}>Existing Category Tags (Tap ✕ to remove)</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
+              {categories.map((c) => (
+                <View
+                  key={c.id}
+                  style={[
+                    styles.choiceChip,
+                    { backgroundColor: colors.bgSecondary, flexDirection: 'row', alignItems: 'center', gap: 6 },
+                  ]}
+                >
+                  <Text style={[styles.choiceChipText, { color: colors.textMain }]}>
+                    {c.emoji} {c.name}
+                  </Text>
+                  {categories.length > 1 && (
+                    <TouchableOpacity
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        deleteCategory(c.id);
+                      }}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Ionicons name="close-circle" size={16} color={colors.danger} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        </AestheticModal>
+
+        {/* Previous Month Notice Popup for Calendar Navigation */}
+        <AestheticModal
+          visible={Boolean(pendingPrevCalMonth)}
+          onClose={() => setPendingPrevCalMonth(null)}
+          title="Previous Month Notice"
+          subtitle="Tracking history notice"
+          icon="🗓️"
+        >
+          <View style={{ paddingVertical: 4 }}>
+            <Text style={{ fontSize: 13, lineHeight: 19, color: colors.textMuted, marginBottom: 18 }}>
+              You started using this app in{' '}
+              <Text style={{ fontWeight: '800', color: colors.textMain }}>
+                {MONTH_NAMES_FULL[new Date().getMonth()]} {new Date().getFullYear()}
+              </Text>
+              . Navigating to previous month records may show empty budget or unloaded salary.
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => setPendingPrevCalMonth(null)}
+                style={{
+                  flex: 1,
+                  paddingVertical: 12,
+                  borderRadius: 14,
+                  backgroundColor: colors.bgSecondary,
+                  borderColor: 'transparent',
+                  borderWidth: 0,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textMain }}>Stay on Current</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => {
+                  if (pendingPrevCalMonth) {
+                    const [py, pm] = pendingPrevCalMonth.split('-');
+                    const maxDays = new Date(parseInt(py, 10), parseInt(pm, 10), 0).getDate();
+                    setSelectedDay((cur) => Math.min(cur, maxDays));
+                    setSelectedMonth(pendingPrevCalMonth);
+                  }
+                  setPendingPrevCalMonth(null);
+                }}
+                style={{
+                  flex: 1.2,
+                  paddingVertical: 12,
+                  borderRadius: 14,
+                  backgroundColor: colors.primaryAccent,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Text style={{ fontSize: 13, fontWeight: '800', color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }}>
+                  View Month ➡️
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </AestheticModal>
+
+        {/* ===================== MODAL 6: BASE SALARY / EDIT SETUP (RS & EMAIL) ===================== */}
+        <BaseSalarySetupModal
+          visible={isSalaryModalOpen}
+          onClose={() => setIsSalaryModalOpen(false)}
+          onSaveSalary={async (amount, dayStr, accId) => {
+            await configureBaseSalary(amount, dayStr, undefined, accId);
+            setIsSalaryModalOpen(false);
+          }}
+          onSkipSalary={async () => {
+            await skipBaseSalary();
+            setIsSalaryModalOpen(false);
+          }}
+          initialSalary={salary}
+          initialDay={baseSalaryDate}
+          forceConfigureStep={true}
+        />
+      </ImageBackground>
     </SafeAreaView>
   );
 }
@@ -2424,7 +2631,10 @@ const styles = StyleSheet.create({
   totoroHeroCard: {
     borderRadius: 24,
     borderWidth: 0,
-    padding: 18,
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 20,
+    marginTop: 26,
     marginBottom: 16,
     position: 'relative',
     overflow: 'visible',
@@ -2442,12 +2652,12 @@ const styles = StyleSheet.create({
   },
   heroPeekSticker: {
     position: 'absolute',
-    right: 12,
-    top: -20,
+    right: 18,
+    top: -14,
     zIndex: 10,
   },
   totoroHeroContent: {
-    paddingTop: 4,
+    paddingTop: 6,
   },
   totoroHeroSub: {
     fontSize: 11,
@@ -2461,6 +2671,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
+    marginTop: 4,
   },
   totoroHeroAmount: {
     fontSize: 26,
@@ -2489,7 +2700,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: Platform.OS === 'ios' ? 110 : 85,
+    flexGrow: 1,
+    paddingBottom: Platform.OS === 'ios' ? 120 : 95,
   },
   viewContainer: {
     paddingHorizontal: 20,
@@ -2499,7 +2711,7 @@ const styles = StyleSheet.create({
   cardCornerSticker: {
     position: 'absolute',
     bottom: 8,
-    right: 18,
+    right: 6,
     zIndex: 10,
   },
   totoroParadeBottom: {

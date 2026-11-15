@@ -96,6 +96,7 @@ export const AestheticModal: React.FC<AestheticModalProps> = ({
                 keyboardDismissMode="on-drag"
                 contentContainerStyle={styles.scrollContent}
                 style={styles.scrollView}
+                nestedScrollEnabled={true}
                 bounces={false}
               >
                 {children}
@@ -133,6 +134,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingTop: 18,
     paddingBottom: Platform.OS === 'ios' ? 28 : 20,
+    maxHeight: '100%',
   },
   scrollView: {
     flexShrink: 1,

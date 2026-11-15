@@ -32,7 +32,7 @@ const server = http.createServer(async (req, res) => {
 
   // Health check endpoint
   if (req.method === 'GET' && (req.url === '/' || req.url === '/health')) {
-    const sender = process.env.GMAIL_USER || process.env.SYSTEM_EMAIL || 'cindrellakoju@gmail.com';
+    const sender = process.env.GMAIL_USER || process.env.SYSTEM_EMAIL || 'cashly.expensetracker@gmail.com';
     const hasPassword = Boolean(process.env.GMAIL_APP_PASSWORD || process.env.SYSTEM_APP_PASSWORD);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(
@@ -74,7 +74,7 @@ const server = http.createServer(async (req, res) => {
           process.env.GMAIL_USER ||
           process.env.SYSTEM_EMAIL ||
           process.env.EXPO_PUBLIC_SYSTEM_EMAIL ||
-          'cindrellakoju@gmail.com'
+          'cashly.expensetracker@gmail.com'
         ).trim();
 
         const appPassword = (
@@ -197,7 +197,7 @@ const server = http.createServer(async (req, res) => {
           process.env.GMAIL_USER ||
           process.env.SYSTEM_EMAIL ||
           process.env.EXPO_PUBLIC_SYSTEM_EMAIL ||
-          'cindrellakoju@gmail.com'
+          'cashly.expensetracker@gmail.com'
         ).trim();
 
         const appPassword = (
@@ -274,7 +274,7 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`\n=================================================`);
   console.log(`🚀 Expense Tracker Email Micro-Service running!`);
   console.log(`📡 Listening on http://localhost:${PORT}`);
-  console.log(`📧 Sender Address: ${process.env.GMAIL_USER || process.env.SYSTEM_EMAIL || 'cindrellakoju@gmail.com'}`);
+  console.log(`📧 Sender Address: ${process.env.GMAIL_USER || process.env.SYSTEM_EMAIL || 'cashly.expensetracker@gmail.com'}`);
   console.log(`🔑 App Password Status: ${process.env.GMAIL_APP_PASSWORD || process.env.SYSTEM_APP_PASSWORD ? 'Configured ✅' : 'Missing in .env ⚠️'}`);
   console.log(`=================================================\n`);
 });

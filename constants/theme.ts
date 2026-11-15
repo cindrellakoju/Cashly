@@ -2,7 +2,7 @@ import { ImageSourcePropType } from 'react-native';
 
 export type AppTheme = 'paper' | 'paperDark' | 'kawaii' | 'dreamy' | 'fresh' | 'playful' | 'midnight' | 'noir';
 
-export type StickerPack = 'totoro' | 'spy_family' | 'cat';
+export type StickerPack = 'totoro' | 'spy_family' | 'cat' | 'penguin';
 
 export interface StickerPackInfo {
   id: StickerPack;
@@ -16,35 +16,43 @@ export interface StickerPackInfo {
 export const STICKER_PACKS: StickerPackInfo[] = [
   {
     id: 'totoro',
-    name: 'My Neighbor Totoro',
-    badge: '🌲 Totoro',
+    name: 'Totoro',
+    badge: 'Totoro',
     tagline: 'Forest spirits, leaf umbrellas & soot sprites',
     icon: 'leaf',
     previewEmoji: '🌲',
   },
   {
     id: 'spy_family',
-    name: 'Spy x Family',
-    badge: '🥜 Spy x Family',
+    name: 'Anya',
+    badge: 'Anya',
     tagline: 'Waku waku! Anya, Bond doggo & Stella stars',
     icon: 'sparkles',
     previewEmoji: '🥜',
   },
   {
     id: 'cat',
-    name: 'Kawaii Cat (Neko)',
-    badge: '🐱 Lucky Neko',
+    name: 'Cat',
+    badge: 'Cat',
     tagline: 'Playful kittens, lucky coins & soft paws',
     icon: 'paw',
     previewEmoji: '🐱',
+  },
+  {
+    id: 'penguin',
+    name: 'Penguin',
+    badge: 'Penguin',
+    tagline: 'Chubby baby penguins & cozy stationery',
+    icon: 'snow',
+    previewEmoji: '🐧',
   },
 ];
 
 export interface ThemeColors {
   name: string;
   badge: string;
-  subtitle: string;
-  paletteDots: string[];
+  subtitle?: string;
+  paletteDots?: string[];
   bgPrimary: string;
   bgSecondary: string;
   bgCard: string;
@@ -125,10 +133,10 @@ export const THEME_STICKERS: Record<AppTheme, ThemeStickers> = {
 
 // 📜 Kraft Memo Pad Theme — Warm cardboard kraft paper, cream grid sheets & hand-drawn ink
 export const PAPER_THEME: ThemeColors = {
-  name: 'Kraft Memo Pad 📜',
-  badge: '📜 Kraft Paper',
-  subtitle: 'Cardboard kraft canvas & cream grid notepad',
-  paletteDots: ['#2C221D', '#F3CA68', '#6AA35E', '#FAF5EE'],
+  name: 'Kraft',
+  badge: 'Kraft',
+  // subtitle: 'Cardboard kraft canvas & cream grid notepad',
+  // paletteDots: ['#2C221D', '#F3CA68', '#6AA35E', '#FAF5EE'],
   bgPrimary: '#FAF5EE',        // Warm cream graph paper canvas (from Account PIN & Image 3)
   bgSecondary: '#F0E6D8',      // Warm parchment & kraft accent
   bgCard: '#FFFFFF',           // Crisp ivory memo sheet
@@ -174,10 +182,10 @@ export const PAPER_THEME: ThemeColors = {
 
 // 🐾 Totoro Craft Grey Theme — Speckled craft grey & cozy cloud paper from Image 2
 export const PAPER_DARK_THEME: ThemeColors = {
-  name: 'Totoro Craft Grey 🐾',
-  badge: '🐾 Totoro Grey',
-  subtitle: 'Recycled speckled craft grey & cloud paper',
-  paletteDots: ['#262422', '#F5F4EE', '#888782', '#6BA270'],
+  name: 'Grey',
+  badge: 'Grey',
+  // subtitle: 'Recycled speckled craft grey & cloud paper',
+  // paletteDots: ['#262422', '#F5F4EE', '#888782', '#6BA270'],
   bgPrimary: '#888782',        // Speckled craft grey from Image 2
   bgSecondary: '#777671',      // Deep craft grey
   bgCard: '#F5F4EE',           // Cloud cream memo sheet
@@ -223,10 +231,10 @@ export const PAPER_DARK_THEME: ThemeColors = {
 
 // 🌸 Kawaii Pastel Theme — Original soft pastel sage grid canvas, sakura pink & forest ink
 export const KAWAII_THEME: ThemeColors = {
-  name: 'Kawaii Pastel 🌸',
-  badge: '🌸 Kawaii',
-  subtitle: 'Pastel sage grid canvas, sakura pink & forest ink',
-  paletteDots: ['#DDEBDC', '#F4AAB9', '#65A865', '#2C352D'],
+  name: 'Pastel Green',
+  badge: 'Pastel Green',
+  // subtitle: 'Pastel sage grid canvas, sakura pink & forest ink',
+  // paletteDots: ['#DDEBDC', '#F4AAB9', '#65A865', '#2C352D'],
   bgPrimary: '#DDEBDC',        // Original soft pastel sage/matcha grid canvas
   bgSecondary: '#EEF5EC',      // Pale matcha accent
   bgCard: '#FFFFFF',           // Crisp white memo sheet
@@ -272,10 +280,10 @@ export const KAWAII_THEME: ThemeColors = {
 
 // 🍓 Strawberry Milk Theme — Soft blush strawberry milk graph paper & plum ink
 const DREAMY_THEME: ThemeColors = {
-  name: 'Strawberry Milk 🍓',
-  badge: '🍓 Strawberry',
-  subtitle: 'Blush pink grid canvas, sakura accents & plum ink',
-  paletteDots: ['#FDF3F5', '#F7A8B8', '#7EC8A4', '#38232D'],
+  name: 'Light Pink',
+  badge: 'Light Pink',
+  // subtitle: 'Blush pink grid canvas, sakura accents & plum ink',
+  // paletteDots: ['#FDF3F5', '#F7A8B8', '#7EC8A4', '#38232D'],
   bgPrimary: '#FDF3F5',        // Soft pastel strawberry milk grid canvas
   bgSecondary: '#FCE7EC',      // Soft pastel rose tint
   bgCard: '#FFFFFF',           // Crisp white memo sheet
@@ -322,8 +330,8 @@ const DREAMY_THEME: ThemeColors = {
 const FRESH_THEME: ThemeColors = {
   name: 'Matcha & Mint 🌿',
   badge: '🌿 Matcha',
-  subtitle: 'Fresh matcha, mint & garden stationery',
-  paletteDots: ['#283526', '#E4F0E1', '#5B9C54', '#FAFDF9'],
+  // subtitle: 'Fresh matcha, mint & garden stationery',
+  // paletteDots: ['#283526', '#E4F0E1', '#5B9C54', '#FAFDF9'],
   bgPrimary: '#C9DBC5',
   bgSecondary: '#B7CEB2',
   bgCard: '#FAFDF9',
@@ -368,10 +376,10 @@ const FRESH_THEME: ThemeColors = {
 };
 
 const PLAYFUL_THEME: ThemeColors = {
-  name: 'Playful Peach 🍑',
-  badge: '🍑 Peach',
-  subtitle: 'Peach stationery, butter & warm toast',
-  paletteDots: ['#3A241C', '#FDE7DC', '#E88258', '#FFFAF7'],
+  name: 'Peach',
+  badge: 'Peach',
+  // subtitle: 'Peach stationery, butter & warm toast',
+  // paletteDots: ['#3A241C', '#FDE7DC', '#E88258', '#FFFAF7'],
   bgPrimary: '#ECC8B8',
   bgSecondary: '#DDB6A4',
   bgCard: '#FFFAF7',
@@ -417,10 +425,10 @@ const PLAYFUL_THEME: ThemeColors = {
 
 // 🌙 Midnight Slate — Soft dark notebook theme
 const MIDNIGHT_THEME: ThemeColors = {
-  name: 'Midnight Ink 🌙',
-  badge: '🌙 Midnight',
-  subtitle: 'Dark night notebook & parchment glow',
-  paletteDots: ['#1C1B22', '#F4F3F8', '#9B8BE2', '#342F42'],
+  name: 'Dark',
+  badge: 'Dark',
+  // subtitle: 'Dark night notebook & parchment glow',
+  // paletteDots: ['#1C1B22', '#F4F3F8', '#9B8BE2', '#342F42'],
   bgPrimary: '#22202A',
   bgSecondary: '#1C1A23',
   bgCard: '#2E2B38',
@@ -475,49 +483,49 @@ export const THEMES: Record<AppTheme, ThemeColors> = {
   noir: PAPER_DARK_THEME,
 };
 
-// Preset Options — Inspired directly by the user's stationery images
-export const PRESET_OPTIONS: { id: AppTheme; label: string; badge: string; subtitle: string; dots: string[] }[] = [
+// Preset Options — Clean color options
+export const PRESET_OPTIONS: { id: AppTheme; label: string; badge: string; subtitle?: string; }[] = [
   {
     id: 'kawaii',
-    label: 'Kawaii Pastel 🌸',
-    badge: '🌸 Kawaii',
-    subtitle: 'Pastel sage grid canvas, sakura pink & forest ink (Original)',
-    dots: ['#DDEBDC', '#F4AAB9', '#65A865', '#2C352D'],
+    label: 'Pastel Green',
+    badge: 'Pastel Green',
+    subtitle: '',
+    // dots: ['#DDEBDC', '#F4AAB9', '#65A865', '#2C352D'],
   },
   {
     id: 'paper',
-    label: 'Kraft Memo Pad 📜',
-    badge: '📜 Kraft',
-    subtitle: 'Cardboard kraft canvas & cream grid notepad (Image 1)',
-    dots: ['#B59473', '#FAF5EE', '#2C221D', '#F3CA68'],
+    label: 'Kraft',
+    badge: 'Kraft',
+    subtitle: '',
+    // dots: ['#B59473', '#FAF5EE', '#2C221D', '#F3CA68'],
   },
   {
     id: 'paperDark',
-    label: 'Totoro Craft Grey 🐾',
-    badge: '🐾 Totoro',
-    subtitle: 'Recycled speckled craft grey & cloud paper (Image 2)',
-    dots: ['#888782', '#F5F4EE', '#262422', '#6BA270'],
+    label: 'Grey',
+    badge: 'Grey',
+    subtitle: '',
+    // dots: ['#888782', '#F5F4EE', '#262422', '#6BA270'],
   },
   {
     id: 'dreamy',
-    label: 'Strawberry Milk 🍓',
-    badge: '🍓 Strawberry',
-    subtitle: 'Blush pink grid canvas, sakura accents & plum ink',
-    dots: ['#FDF3F5', '#F7A8B8', '#7EC8A4', '#38232D'],
+    label: 'Light Pink',
+    badge: 'Light Pink',
+    subtitle: '',
+    // dots: ['#FDF3F5', '#F7A8B8', '#7EC8A4', '#38232D'],
   },
   {
     id: 'playful',
-    label: 'Playful Peach 🍑',
-    badge: '🍑 Peach',
-    subtitle: 'Warm peach stationery & butter accents',
-    dots: ['#ECC8B8', '#FFFAF7', '#3A241C', '#E88258'],
+    label: 'Peach',
+    badge: 'Peach',
+    subtitle: '',
+    // dots: ['#ECC8B8', '#FFFAF7', '#3A241C', '#E88258'],
   },
   {
     id: 'midnight',
-    label: 'Midnight Ink 🌙',
-    badge: '🌙 Midnight',
-    subtitle: 'Dark night notebook & parchment glow',
-    dots: ['#22202A', '#FAF7FD', '#454154', '#B8A6F8'],
+    label: 'Dark',
+    badge: 'Dark',
+    subtitle: '',
+    // dots: ['#22202A', '#FAF7FD', '#454154', '#B8A6F8'],
   },
 ];
 
@@ -525,7 +533,7 @@ export const CATEGORY_PALETTES: Record<AppTheme, Record<string, string>> = {
   paper: {
     '🛍️ Shopping': '#D95B66',
     '🏠 Utilities': '#6AA35E',
-    '🍔 Food': '#E69836',
+    '🍔 Food': '#E6x9836',
     '🚗 Transport': '#5888B5',
     '☕ Coffee': '#7D5843',
     '🍿 Fun': '#9568B8',

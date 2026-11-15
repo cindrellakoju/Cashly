@@ -35,12 +35,12 @@ export const EmailVerificationModal: React.FC<EmailVerificationModalProps> = ({
   onClose,
   onBack,
   isInline = false,
-  badgeText = 'STEP 1 OF 2 • MANDATORY SECURITY',
+  badgeText = 'ACCOUNT SECURITY • VERIFY EMAIL',
   title,
   subtitle,
-  finishBtnText = 'Continue to Base Salary ➡️',
+  finishBtnText = 'Continue to Home Screen 🏠✨',
 }) => {
-  const { colors, recoveryEmail, setRecoveryEmail } = useFinancial();
+  const { colors, recoveryEmail, setRecoveryEmail, completeOnboarding, markWelcomeShown, openBackupModal } = useFinancial();
 
   const [emailInput, setEmailInput] = useState<string>(recoveryEmail || '');
   const [emailError, setEmailError] = useState<string>('');
@@ -135,6 +135,8 @@ export const EmailVerificationModal: React.FC<EmailVerificationModalProps> = ({
     setOtpError('');
     setIsVerified(true);
     await setRecoveryEmail(targetEmail);
+    await completeOnboarding();
+    await markWelcomeShown();
     try {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch { }
@@ -227,7 +229,10 @@ export const EmailVerificationModal: React.FC<EmailVerificationModalProps> = ({
       try {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } catch { }
-      await setRecoveryEmail(emailInput.trim().toLowerCase() || 'dev@cashly.local');
+      const cleanEmail = emailInput.trim().toLowerCase() || 'dev@cashly.local';
+      await setRecoveryEmail(cleanEmail);
+      await completeOnboarding();
+      await markWelcomeShown();
     } else {
       setOtpError('Incorrect code. Please check your email and try again.');
       try {
@@ -244,6 +249,8 @@ export const EmailVerificationModal: React.FC<EmailVerificationModalProps> = ({
       return;
     }
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    await completeOnboarding();
+    await markWelcomeShown();
     await onVerifiedFinish();
   };
 
@@ -275,8 +282,8 @@ export const EmailVerificationModal: React.FC<EmailVerificationModalProps> = ({
         >
           <TotoroSticker
             type="peek"
-            size={68}
-            style={{ position: 'absolute', top: -28, right: 18, zIndex: 10 }}
+            size={52}
+            style={{ position: 'absolute', top: 12, right: 48, zIndex: 10 }}
           />
           <ScrollView
             showsVerticalScrollIndicator={false}
@@ -432,7 +439,7 @@ export const EmailVerificationModal: React.FC<EmailVerificationModalProps> = ({
                     >
                       <Ionicons name="keypad-outline" size={20} color={colors.textMuted} style={{ marginRight: 8 }} />
                       <TextInput
-                        style={[styles.emailInput, { color: colors.textMain, fontSize: 20, letterSpacing: 6, fontWeight: '800' }]}
+                        style={[styles.emailInput, { color: colors.textMain, fontSize: 17, letterSpacing: 1.5, fontWeight: '700' }]}
                         placeholder="123456"
                         placeholderTextColor={colors.textSubtle}
                         keyboardType="number-pad"
@@ -512,6 +519,29 @@ export const EmailVerificationModal: React.FC<EmailVerificationModalProps> = ({
                 )}
               </>
             )}
+
+            {/* RESTORE BACKUP AT START */}
+            <View style={[styles.startBackupSection, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
+              <View style={styles.startBackupHeader}>
+                <Ionicons name="cloud-outline" size={16} color={colors.primaryAccent} />
+                <Text style={[styles.startBackupTitle, { color: colors.textMain }]}>
+                  Already have a Cashly backup?
+                </Text>
+              </View>
+              <Text style={[styles.startBackupSubtitle, { color: colors.textMuted }]}>
+                Restore previous data directly from a Cashly backup file.
+              </Text>
+              <View style={styles.startBackupBtnRow}>
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => openBackupModal('import')}
+                  style={[styles.startBackupBtn, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft }]}
+                >
+                  <Ionicons name="download-outline" size={15} color={colors.primaryGreen || '#10b981'} style={{ marginRight: 6 }} />
+                  <Text style={[styles.startBackupBtnText, { color: colors.textMain }]}>Import JSON 📁</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
 
             {/* Action Buttons */}
             <View style={styles.actionBtnCol}>
@@ -740,5 +770,45 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     letterSpacing: 0.2,
+  },
+  startBackupSection: {
+    marginTop: 16,
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 6,
+  },
+  startBackupHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  startBackupTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
+  startBackupSubtitle: {
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  startBackupBtnRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 8,
+  },
+  startBackupBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  startBackupBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
 });

@@ -1,10 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AestheticModal } from './AestheticModal';
 import { useFinancial } from '@/context/FinancialContext';
 import { TotoroSticker } from './TotoroStickers';
+
+const MAX_ATTEMPTS = 3;
+const LOCKOUT_DURATION_SECONDS = 30;
 
 interface AdminPinModalProps {
   visible: boolean;
@@ -40,39 +44,140 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({
   } = useFinancial();
   const [pin, setPin] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string>('');
+  const [failedAttempts, setFailedAttempts] = useState<number>(0);
+  const [lockoutSeconds, setLockoutSeconds] = useState<number>(0);
   const [isRecovering, setIsRecovering] = useState<boolean>(false);
 
   const isAccount = pinType ? pinType === 'account' : onVerify === verifyAccountPin;
   const isDefaultPin = (isAccount ? accountPin : adminPin) === '1234';
+  const targetName = isAccount ? 'account' : 'admin';
+  const lockoutKey = `@cashly_pin_lockout_${targetName}`;
+  const attemptsKey = `@cashly_pin_attempts_${targetName}`;
+
+  const isLocked = lockoutSeconds > 0;
+
+  // On open or visible change, check stored lockout timestamp & attempts
+  useEffect(() => {
+    if (visible) {
+      setPin('');
+      setErrorMsg('');
+      const checkLockout = async () => {
+        try {
+          const storedLockout = await AsyncStorage.getItem(lockoutKey);
+          if (storedLockout) {
+            const lockoutUntil = parseInt(storedLockout, 10);
+            const remaining = Math.ceil((lockoutUntil - Date.now()) / 1000);
+            if (remaining > 0) {
+              setLockoutSeconds(remaining);
+              setFailedAttempts(MAX_ATTEMPTS);
+              return;
+            } else {
+              await AsyncStorage.removeItem(lockoutKey);
+              await AsyncStorage.removeItem(attemptsKey);
+              setLockoutSeconds(0);
+              setFailedAttempts(0);
+              return;
+            }
+          }
+          const storedAttempts = await AsyncStorage.getItem(attemptsKey);
+          if (storedAttempts) {
+            const count = parseInt(storedAttempts, 10) || 0;
+            if (count > 0 && count < MAX_ATTEMPTS) {
+              setFailedAttempts(count);
+              const remaining = MAX_ATTEMPTS - count;
+              setErrorMsg(`Incorrect PIN. ${remaining} ${remaining === 1 ? 'attempt' : 'attempts'} remaining.`);
+            } else {
+              // Stale count >= MAX_ATTEMPTS without active lockout -> reset to clean state
+              await AsyncStorage.removeItem(attemptsKey);
+              setFailedAttempts(0);
+            }
+          }
+        } catch {}
+      };
+      checkLockout();
+    }
+  }, [visible, lockoutKey, attemptsKey]);
+
+  // Countdown timer when locked out
+  useEffect(() => {
+    let interval: any = null;
+    if (lockoutSeconds > 0) {
+      interval = setInterval(() => {
+        setLockoutSeconds((prev) => (prev <= 1 ? 0 : prev - 1));
+      }, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [lockoutSeconds > 0]);
+
+  // Reset attempts and remove storage keys when lockout timer completes
+  useEffect(() => {
+    if (lockoutSeconds === 0 && failedAttempts >= MAX_ATTEMPTS) {
+      setFailedAttempts(0);
+      setErrorMsg('');
+      AsyncStorage.removeItem(lockoutKey).catch(() => {});
+      AsyncStorage.removeItem(attemptsKey).catch(() => {});
+    }
+  }, [lockoutSeconds, failedAttempts, lockoutKey, attemptsKey]);
 
   const displayHint = (() => {
-    if (hintText !== undefined) {
+    if (hintText !== undefined && hintText !== '') {
       if (hintText === 'Default PIN: 1234') {
-        return isDefaultPin ? 'Default PIN: 1234' : '';
+        return isDefaultPin ? 'Default PIN: 1234' : 'Enter 4-Digit Security PIN';
       }
       return hintText;
     }
-    return isDefaultPin ? 'Default PIN: 1234' : '';
+    return isDefaultPin ? 'Default PIN: 1234' : 'Enter 4-Digit Security PIN';
   })();
 
   const handleDigitPress = (digit: string) => {
+    if (isLocked) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      return;
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setErrorMsg('');
     if (pin.length < 4) {
       const newPin = pin + digit;
       setPin(newPin);
       if (newPin.length === 4) {
-        setTimeout(() => {
+        setTimeout(async () => {
           const isValid = onVerify ? onVerify(newPin) : verifyAdminPin(newPin);
           if (isValid) {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             setPin('');
             setErrorMsg('');
+            setFailedAttempts(0);
+            setLockoutSeconds(0);
+            try {
+              await AsyncStorage.removeItem(lockoutKey);
+              await AsyncStorage.removeItem(attemptsKey);
+            } catch {}
             onSuccess();
           } else {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-            setErrorMsg('Incorrect PIN. Please try again.');
+            const nextAttempts = failedAttempts + 1;
+            setFailedAttempts(nextAttempts);
             setPin('');
+            if (nextAttempts >= MAX_ATTEMPTS) {
+              const lockoutUntil = Date.now() + LOCKOUT_DURATION_SECONDS * 1000;
+              setLockoutSeconds(LOCKOUT_DURATION_SECONDS);
+              setErrorMsg('');
+              try {
+                await AsyncStorage.setItem(lockoutKey, String(lockoutUntil));
+                await AsyncStorage.setItem(attemptsKey, String(MAX_ATTEMPTS));
+              } catch {}
+            } else {
+              const left = MAX_ATTEMPTS - nextAttempts;
+              const msg = isDefaultPin
+                ? `Incorrect PIN (Try: 1234). ${left} ${left === 1 ? 'attempt' : 'attempts'} left.`
+                : `Incorrect PIN. ${left} ${left === 1 ? 'attempt' : 'attempts'} remaining.`;
+              setErrorMsg(msg);
+              try {
+                await AsyncStorage.setItem(attemptsKey, String(nextAttempts));
+              } catch {}
+            }
           }
         }, 150);
       }
@@ -80,6 +185,7 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({
   };
 
   const handleBackspace = () => {
+    if (isLocked) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setErrorMsg('');
     setPin((prev) => prev.slice(0, -1));
@@ -111,11 +217,22 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({
               const target = isAccount ? 'account' : 'admin';
               const res = await recoverPinViaEmail(target);
               if (res.success) {
+                // Clear lockout upon successful PIN recovery
+                await AsyncStorage.removeItem(lockoutKey);
+                await AsyncStorage.removeItem(attemptsKey);
+                setLockoutSeconds(0);
+                setFailedAttempts(0);
+                setErrorMsg('');
                 Alert.alert(
                   'New PIN Sent! ✉️',
                   `A new 4-digit PIN has been generated and sent to ${recoveryEmail}. Please check your inbox.`
                 );
               } else if (res.newPin) {
+                await AsyncStorage.removeItem(lockoutKey);
+                await AsyncStorage.removeItem(attemptsKey);
+                setLockoutSeconds(0);
+                setFailedAttempts(0);
+                setErrorMsg('');
                 Alert.alert(
                   'PIN Reset 🔑',
                   `Your PIN has been reset to: ${res.newPin}\n\n(Note: Email dispatch server is offline, so your new PIN is displayed here. Please save it.)`
@@ -151,8 +268,8 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({
     >
       <View style={styles.container}>
         {/* Totoro Security Mascot */}
-        <View style={{ alignItems: 'center', marginBottom: 12 }}>
-          <TotoroSticker type={isAccount ? 'vault' : 'peek'} size={58} />
+        <View style={{ alignItems: 'center', paddingTop: 8, marginBottom: 12 }}>
+          <TotoroSticker type={isLocked ? 'curious' : isAccount ? 'vault' : 'peek'} size={68} />
         </View>
 
         {/* 4 PIN Dots */}
@@ -165,8 +282,16 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({
                 style={[
                   styles.dot,
                   {
-                    borderColor: colors.borderAccent || colors.primaryAccent,
-                    backgroundColor: isFilled ? colors.primaryAccent : 'transparent',
+                    borderColor: isLocked
+                      ? (colors.danger || '#ef4444')
+                      : isFilled
+                      ? colors.primaryAccent
+                      : colors.textMuted,
+                    backgroundColor: isLocked
+                      ? (colors.dangerLight || '#FFEBEB')
+                      : isFilled
+                      ? colors.primaryAccent
+                      : colors.bgSecondary,
                   },
                 ]}
               />
@@ -174,8 +299,26 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({
           })}
         </View>
 
-        {errorMsg ? (
-          <Text style={[styles.errorText, { color: colors.danger }]}>{errorMsg}</Text>
+        {/* Lockout countdown timer or error message or hint */}
+        {isLocked ? (
+          <View
+            style={[
+              styles.timerContainer,
+              {
+                backgroundColor: colors.dangerLight || '#FFEBEB',
+                borderColor: colors.danger || '#ef4444',
+              },
+            ]}
+          >
+            <Ionicons name="timer-outline" size={18} color={colors.danger || '#ef4444'} />
+            <Text style={[styles.timerText, { color: colors.danger || '#ef4444' }]}>
+              Too many attempts. Try again in {String(Math.floor(lockoutSeconds / 60)).padStart(2, '0')}:{String(lockoutSeconds % 60).padStart(2, '0')}
+            </Text>
+          </View>
+        ) : errorMsg ? (
+          <View style={{ paddingHorizontal: 10, marginBottom: 16 }}>
+            <Text style={[styles.errorText, { color: colors.danger }]}>{errorMsg}</Text>
+          </View>
         ) : displayHint ? (
           <Text style={[styles.hintText, { color: colors.textSubtle }]}>{displayHint}</Text>
         ) : (
@@ -194,11 +337,17 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({
                   return (
                     <TouchableOpacity
                       key={cIdx}
-                      activeOpacity={0.7}
+                      activeOpacity={isLocked ? 1 : 0.7}
                       onPress={handleBackspace}
+                      disabled={isLocked}
                       style={[
                         styles.keyButton,
-                        { backgroundColor: colors.bgSecondary, borderColor: 'transparent', borderWidth: 0 },
+                        {
+                          backgroundColor: colors.bgSecondary,
+                          borderColor: 'transparent',
+                          borderWidth: 0,
+                          opacity: isLocked ? 0.35 : 1,
+                        },
                       ]}
                     >
                       <Ionicons name="backspace-outline" size={22} color={colors.textMain} />
@@ -208,11 +357,17 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({
                 return (
                   <TouchableOpacity
                     key={cIdx}
-                    activeOpacity={0.7}
+                    activeOpacity={isLocked ? 1 : 0.7}
                     onPress={() => handleDigitPress(item)}
+                    disabled={isLocked}
                     style={[
                       styles.keyButton,
-                      { backgroundColor: colors.bgSecondary, borderColor: 'transparent', borderWidth: 0 },
+                      {
+                        backgroundColor: colors.bgSecondary,
+                        borderColor: 'transparent',
+                        borderWidth: 0,
+                        opacity: isLocked ? 0.35 : 1,
+                      },
                     ]}
                   >
                     <Text style={[styles.keyText, { color: colors.textMain }]}>{item}</Text>
@@ -252,15 +407,29 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   dot: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     borderWidth: 2,
+  },
+  timerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 16,
+  },
+  timerText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   errorText: {
     fontSize: 12,
     fontWeight: '700',
-    marginBottom: 16,
+    textAlign: 'center',
   },
   hintText: {
     fontSize: 12,

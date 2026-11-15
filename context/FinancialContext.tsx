@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Linking from 'expo-linking';
 import { AppTheme, THEMES, ThemeColors, THEME_STICKERS, ThemeStickers, StickerPack } from '@/constants/theme';
@@ -81,6 +82,9 @@ export interface WishlistItem {
   targetDate: string;
   isPurchased?: boolean;
   imageUrl?: string;
+  completedDate?: string;
+  sourceAccount?: string;
+  expenseId?: string;
 }
 
 export interface Account {
@@ -167,6 +171,8 @@ const INITIAL_CATEGORIES: Category[] = [
   { id: '4', name: 'Shopping', emoji: '🛍️', color: '#f2738a' },
   { id: '5', name: 'Utilities', emoji: '🏠', color: '#7ab583' },
   { id: '6', name: 'Fun', emoji: '🍿', color: '#9d7be2' },
+  { id: '7', name: 'Money Lent', emoji: '🤝', color: '#38bdf8' },
+  { id: '8', name: 'Wishlist', emoji: '🎁', color: '#ec4899' },
 ];
 
 const INITIAL_INCOMES: Income[] = [];
@@ -215,6 +221,9 @@ interface FinancialContextType {
   totalNetWorth: number;
   totalEnvelopesBudgeted: number;
   currencySymbol: string;
+  customCurrencies: string[];
+  addCustomCurrency: (symbol: string) => Promise<void>;
+  removeCustomCurrency: (symbol: string) => Promise<void>;
 
   // Month Filtering
   selectedMonth: string;
@@ -244,10 +253,12 @@ interface FinancialContextType {
   verifyAccountPin: (pin: string) => boolean;
   setSalaryAccountId: (accountId: string | null) => Promise<void>;
   updateSalary: (val: number) => void;
-  configureBaseSalary: (amount: number, dayStr: string, effectiveMonthKey?: string) => Promise<void>;
+  configureBaseSalary: (amount: number, dayStr: string, effectiveMonthKey?: string, designatedAccountId?: string) => Promise<void>;
   skipBaseSalary: () => Promise<void>;
   salaries: SalaryRecord[];
+  salaryLogs: SalaryLog[];
   initialCashInHand: number;
+  hasSetInitialCash: boolean;
   showMonthlyBills: boolean;
   setShowMonthlyBills: (show: boolean) => Promise<void>;
   toggleShowMonthlyBills: () => Promise<void>;
@@ -256,8 +267,9 @@ interface FinancialContextType {
   recoverPinViaEmail: (target: 'admin' | 'account') => Promise<{ success: boolean; newPin?: string; email?: string; error?: string; message?: string }>;
   linkAndRecoverPinViaEmail: (target: 'admin' | 'account', email: string) => Promise<{ success: boolean; newPin?: string; email?: string; error?: string }>;
   activeMonthSalary: number;
+  salaryStartDate: string;
   getSalaryForMonth: (monthKey: string) => { amount: number; day: string; accountId?: string; accountName?: string };
-  setCashInHandInitialMoney: (amount: number) => Promise<void>;
+  setCashInHandInitialMoney: (amount: number) => Promise<boolean>;
   updateSalaryRecord: (rec: SalaryRecord) => Promise<void>;
   deleteSalaryRecord: (id: string) => Promise<void>;
   isDbLoaded: boolean;
@@ -285,10 +297,19 @@ interface FinancialContextType {
   addDebt: (debt: Omit<DebtItem, 'id' | 'remaining' | 'status' | 'history'>) => void;
   updateDebt: (id: string, debtData: Partial<DebtItem>) => void;
   deleteDebt: (id: string) => void;
-  recordInstallment: (debtId: string, amount: number, account: string) => void;
+  recordInstallment: (debtId: string, amount: number, account: string, customDate?: string) => void;
   addWishlistItem: (item: Omit<WishlistItem, 'id' | 'isPurchased'>) => void;
   updateWishlistItem: (id: string, itemData: Partial<WishlistItem>) => void;
   toggleWishlistPurchased: (id: string) => void;
+  completeWishlistItem: (
+    id: string,
+    details: {
+      completedDate: string;
+      sourceAccount: string;
+      deductMoney?: boolean;
+    }
+  ) => void;
+  uncompleteWishlistItem: (id: string) => void;
   deleteWishlistItem: (id: string) => void;
   addAccount: (account: Omit<Account, 'id'> & { id?: string }) => Account;
   updateAccount: (id: string, accountData: Partial<Account>) => void;
@@ -304,6 +325,10 @@ interface FinancialContextType {
   exportDataBackup: () => Promise<string>;
   importDataBackup: (jsonString: string) => Promise<{ success: boolean; message: string; counts?: Record<string, number> }>;
   reloadAllDataFromDB: () => Promise<void>;
+  isBackupModalOpen: boolean;
+  backupModalMode: 'export' | 'import' | null;
+  openBackupModal: (mode: 'export' | 'import') => void;
+  closeBackupModal: () => void;
 }
 
 import {
@@ -350,6 +375,8 @@ import {
   insertSalaryRecord,
   updateSalaryRecordInDB,
   removeSalaryRecord,
+  SalaryLog,
+  insertSalaryLog,
   saveInitialCashInHand,
   clearPINsInDatabase,
   markOnboardingCompleted,
@@ -364,19 +391,33 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [theme, setThemeState] = useState<AppTheme>('kawaii');
   const [stickerPack, setStickerPackState] = useState<StickerPack>('totoro');
   const [currencySymbol, setCurrencySymbolState] = useState<string>('Rs.');
+  const [customCurrencies, setCustomCurrencies] = useState<string[]>([]);
   const [salary, setSalary] = useState<number>(0);
   const [hasBaseSalary, setHasBaseSalary] = useState<boolean | null>(null);
   const [baseSalaryDate, setBaseSalaryDate] = useState<string>('1');
-  const [isVaultUnlocked, setIsVaultUnlocked] = useState<boolean>(false);
+  const [isVaultUnlocked, setIsVaultUnlocked] = useState<boolean>(true);
   const [isPrivacyMasked, setIsPrivacyMasked] = useState<boolean>(false);
   const [pinCode, setPinCodeState] = useState<string>('1234');
   const [adminPin, setAdminPinState] = useState<string>('1234');
   const [accountPin, setAccountPinState] = useState<string>('1234');
   const [recoveryEmail, setRecoveryEmailState] = useState<string>('');
+  const [salaryStartDate, setSalaryStartDateState] = useState<string>('');
   const [salaryAccountId, setSalaryAccountIdState] = useState<string | null>(null);
   const [manuallyLoadedMonths, setManuallyLoadedMonths] = useState<string[]>([]);
   const [creditedSalaryMonths, setCreditedSalaryMonths] = useState<string[]>([]);
   const [isAdminMode, setIsAdminMode] = useState<boolean>(false);
+  const [isBackupModalOpen, setIsBackupModalOpen] = useState<boolean>(false);
+  const [backupModalMode, setBackupModalMode] = useState<'export' | 'import' | null>(null);
+
+  const openBackupModal = (mode: 'export' | 'import') => {
+    setBackupModalMode(mode);
+    setIsBackupModalOpen(true);
+  };
+
+  const closeBackupModal = () => {
+    setIsBackupModalOpen(false);
+    setBackupModalMode(null);
+  };
 
   const lockAdminMode = () => {
     setIsAdminMode(false);
@@ -403,7 +444,9 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [transfers, setTransfers] = useState<InternalTransfer[]>(INITIAL_TRANSFERS);
   const [transactions, setTransactions] = useState<Transaction[]>(INITIAL_TRANSACTIONS);
   const [salaries, setSalaries] = useState<SalaryRecord[]>([]);
+  const [salaryLogs, setSalaryLogs] = useState<SalaryLog[]>([]);
   const [initialCashInHand, setInitialCashInHand] = useState<number>(0);
+  const [hasSetInitialCash, setHasSetInitialCash] = useState<boolean>(false);
   const [showMonthlyBills, setShowMonthlyBillsState] = useState<boolean>(true);
 
   const setShowMonthlyBills = async (show: boolean) => {
@@ -463,6 +506,7 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           setStickerPackState(loaded.stickerPack);
         }
         setCurrencySymbolState(loaded.currencySymbol);
+        setCustomCurrencies(loaded.customCurrencies || []);
         setSalary(loaded.salary);
         setHasBaseSalary(loaded.hasBaseSalary ?? null);
         setBaseSalaryDate(loaded.baseSalaryDate || '1');
@@ -470,6 +514,8 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setAdminPinState(loaded.adminPin || '1234');
         setAccountPinState(loaded.accountPin || loaded.pinCode || '1234');
         setRecoveryEmailState(loaded.recoveryEmail || '');
+    setSalaryStartDateState(loaded.salaryStartDate || '');
+        setSalaryStartDateState(loaded.salaryStartDate || '');
         setSalaryAccountIdState(loaded.salaryAccountId || null);
         const isFinished = loaded.hasCompletedOnboarding ?? false;
         setHasCompletedOnboarding(isFinished);
@@ -477,7 +523,20 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setManuallyLoadedMonths(loaded.manuallyLoadedMonths || []);
         setCreditedSalaryMonths(loaded.creditedSalaryMonths || []);
         setEnvelopes(loaded.envelopes);
-        setCategories(loaded.categories);
+        let loadedCats = [...(loaded.categories || [])];
+        const hasMoneyLent = loadedCats.some((c) => c.name.toLowerCase().includes('money lent') || c.name.toLowerCase() === 'lent');
+        if (!hasMoneyLent) {
+          const moneyLentCat: Category = { id: '7', name: 'Money Lent', emoji: '🤝', color: '#38bdf8' };
+          loadedCats.push(moneyLentCat);
+          insertCategory(moneyLentCat).catch(() => {});
+        }
+        const hasWishlist = loadedCats.some((c) => c.name.toLowerCase().includes('wishlist'));
+        if (!hasWishlist) {
+          const wishlistCat: Category = { id: '8', name: 'Wishlist', emoji: '🎁', color: '#ec4899' };
+          loadedCats.push(wishlistCat);
+          insertCategory(wishlistCat).catch(() => {});
+        }
+        setCategories(loadedCats);
         setIncomes(loaded.incomes);
         setExpenses(loaded.expenses);
         setDebts(loaded.debts);
@@ -485,8 +544,48 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setAccounts(loaded.accounts);
         setTransfers(loaded.transfers);
         setTransactions(loaded.transactions);
-        setSalaries(loaded.salaries || []);
+        const loadedSals = loaded.salaries || [];
+        setSalaries(loadedSals);
+        let loadedLogs = loaded.salaryLogs || [];
+        if (loadedLogs.length === 0 && (loaded.hasBaseSalary && loaded.salary > 0)) {
+          const sAcc = loaded.salaryAccountId
+            ? (loaded.accounts || []).find((a) => a.id === loaded.salaryAccountId)
+            : (loaded.accounts || [])[0];
+          const initialLog: SalaryLog = {
+            id: `sal_log_init_${Date.now()}`,
+            action: 'added',
+            amount: loaded.salary,
+            day: loaded.baseSalaryDate || '1',
+            accountName: sAcc?.name || 'Cash in Hand',
+            timestamp: new Date().toISOString(),
+            note: 'Current base salary configuration',
+          };
+          insertSalaryLog(initialLog).catch(() => {});
+          loadedLogs = [initialLog];
+        }
+        setSalaryLogs(loadedLogs);
+        if (loaded.hasBaseSalary && loaded.salary > 0) {
+          const curMonth = getCurrentMonthKey();
+          const hasRecord = loadedSals.some((s) => s.month === curMonth);
+          if (!hasRecord) {
+            const sAcc = loaded.salaryAccountId
+              ? (loaded.accounts || []).find((a) => a.id === loaded.salaryAccountId)
+              : (loaded.accounts || [])[0];
+            const autoRec: SalaryRecord = {
+              id: `salary_rec_${curMonth}`,
+              month: curMonth,
+              amount: loaded.salary,
+              day: loaded.baseSalaryDate || '1',
+              accountId: sAcc?.id,
+              accountName: sAcc?.name || 'Cash in Hand',
+              createdAt: new Date().toISOString(),
+            };
+            insertSalaryRecord(autoRec).catch(() => {});
+            setSalaries((prev) => [...prev, autoRec].sort((a, b) => a.month.localeCompare(b.month)));
+          }
+        }
         setInitialCashInHand(loaded.initialCashInHand || 0);
+        setHasSetInitialCash(loaded.hasSetInitialCash || (loaded.initialCashInHand ? loaded.initialCashInHand > 0 : false));
         if (loaded.showMonthlyBills !== undefined) {
           setShowMonthlyBillsState(loaded.showMonthlyBills);
         }
@@ -667,7 +766,7 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         success: true,
         newPin,
         email: cleanEmail,
-        message: emailResult.message || 'PIN email dispatched successfully via Gmail SMTP!',
+        message: emailResult.message || 'PIN email dispatched successfully!',
       };
     }
 
@@ -676,7 +775,7 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       newPin,
       email: cleanEmail,
       error: emailResult.error || 'SMTP_FAILED',
-      message: emailResult.message || 'Failed to dispatch email via Gmail SMTP',
+      message: emailResult.message || 'Failed to dispatch email',
     };
   };
 
@@ -717,11 +816,60 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const setSalaryAccountId = async (accId: string | null) => {
+    const prevAccId = salaryAccountId;
     setSalaryAccountIdState(accId);
     if (accId) {
       await saveAppSetting('salary_account_id', accId);
+      const acc = accounts.find((a) => a.id === accId);
+      const prevAcc = accounts.find((a) => a.id === prevAccId);
+      const targetMonth = selectedMonth === 'ALL' ? getCurrentMonthKey() : selectedMonth;
+      setSalaries((prev) =>
+        prev.map((s) => {
+          if (s.month === targetMonth) {
+            const updated: SalaryRecord = {
+              ...s,
+              accountId: acc?.id,
+              accountName: acc?.name || s.accountName,
+            };
+            updateSalaryRecordInDB(updated);
+            return updated;
+          }
+          return s;
+        })
+      );
+
+      // Record audit log if deposit bank changed and base salary is configured
+      if (prevAccId !== accId && (hasBaseSalary || salary > 0)) {
+        const logItem: SalaryLog = {
+          id: `sal_log_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+          action: 'updated',
+          amount: salary,
+          day: baseSalaryDate || '1',
+          accountName: acc?.name || 'Selected Account',
+          timestamp: new Date().toISOString(),
+          note: prevAcc
+            ? `Deposit bank changed from ${prevAcc.name} to ${acc?.name || 'New Account'}`
+            : `Deposit bank set to ${acc?.name || 'New Account'}`,
+        };
+        insertSalaryLog(logItem).catch(() => {});
+        setSalaryLogs((prev) => [logItem, ...prev]);
+      }
     } else {
       await deleteAppSetting('salary_account_id');
+      if (prevAccId && (hasBaseSalary || salary > 0)) {
+        const prevAcc = accounts.find((a) => a.id === prevAccId);
+        const logItem: SalaryLog = {
+          id: `sal_log_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+          action: 'updated',
+          amount: salary,
+          day: baseSalaryDate || '1',
+          accountName: 'None',
+          timestamp: new Date().toISOString(),
+          note: `Deposit bank removed (was ${prevAcc?.name || 'Account'})`,
+        };
+        insertSalaryLog(logItem).catch(() => {});
+        setSalaryLogs((prev) => [logItem, ...prev]);
+      }
     }
   };
 
@@ -735,6 +883,30 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     saveAppSetting('currencySymbol', clean).catch((err) => {
       console.warn('Failed to save currencySymbol to SQLite:', err);
     });
+  };
+
+  const addCustomCurrency = async (symbol: string) => {
+    const clean = symbol.trim();
+    if (!clean) return;
+    const standard = ['Rs.', '$', '₹', '€'];
+    if (standard.includes(clean)) {
+      setCurrencySymbol(clean);
+      return;
+    }
+    const updated = Array.from(new Set([...customCurrencies, clean]));
+    setCustomCurrencies(updated);
+    await saveAppSetting('custom_currencies', JSON.stringify(updated));
+    setCurrencySymbol(clean);
+  };
+
+  const removeCustomCurrency = async (symbol: string) => {
+    const clean = symbol.trim();
+    const updated = customCurrencies.filter((c) => c !== clean);
+    setCustomCurrencies(updated);
+    await saveAppSetting('custom_currencies', JSON.stringify(updated));
+    if (currencySymbol === clean) {
+      setCurrencySymbol('Rs.');
+    }
   };
 
   const [selectedMonth, setSelectedMonth] = useState<string>(getCurrentMonthKey());
@@ -797,8 +969,107 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     return parsed === selectedMonth;
   };
 
-  const filteredExpenses = expenses.filter((e) => matchesMonth(e.date));
-  const filteredIncomes = incomes.filter((i) => matchesMonth(i.date));
+  const parseDateToTimestamp = (dateStr?: string): number => {
+    if (!dateStr) return 0;
+    const trimmed = dateStr.trim();
+    const textMatch = trimmed.match(/^(\d{1,2})\s+([A-Za-z]{3,})\.?\s+(\d{4})/);
+    if (textMatch) {
+      const d = parseInt(textMatch[1], 10);
+      const mStr = textMatch[2].slice(0, 3).toLowerCase();
+      const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+      const mIdx = months.indexOf(mStr);
+      const y = parseInt(textMatch[3], 10);
+      if (mIdx !== -1 && d >= 1 && d <= 31) {
+        return new Date(y, mIdx, d).getTime();
+      }
+    }
+    const isoMatch = trimmed.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+    if (isoMatch) {
+      return new Date(parseInt(isoMatch[1], 10), parseInt(isoMatch[2], 10) - 1, parseInt(isoMatch[3], 10)).getTime();
+    }
+    const parsed = new Date(trimmed);
+    return isNaN(parsed.getTime()) ? 0 : parsed.getTime();
+  };
+
+  // Derive Money Lent as outgoing expenses and Money Borrowed as incoming incomes
+  const lentExpenses: Expense[] = React.useMemo(() => {
+    const list: Expense[] = [];
+    for (const d of debts) {
+      if (d.type === 'lent') {
+        list.push({
+          id: `debt_lent_${d.id}`,
+          date: d.date || new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+          category: 'Money Lent',
+          amount: d.total,
+          reason: d.reason ? `Money Lent to ${d.person}: ${d.reason}` : `Money Lent to ${d.person}`,
+          stored: d.account || 'Cash in Hand',
+          type: 'outgoing',
+        });
+      } else if (d.type === 'borrowed' && Array.isArray(d.history)) {
+        // User repaying borrowed debt is an outflow
+        for (const h of d.history) {
+          list.push({
+            id: `debt_repay_exp_${h.id}`,
+            date: h.date,
+            category: '💸 Debt Repaid',
+            amount: h.amount,
+            reason: `Repayment to ${d.person}`,
+            stored: h.account || d.account || 'Cash in Hand',
+            type: 'outgoing',
+          });
+        }
+      }
+    }
+    return list;
+  }, [debts]);
+
+  const borrowedIncomes: Income[] = React.useMemo(() => {
+    const list: Income[] = [];
+    for (const d of debts) {
+      if (d.type === 'borrowed') {
+        list.push({
+          id: `debt_borrowed_${d.id}`,
+          date: d.date || new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+          amount: d.total,
+          stored: d.account || 'Cash in Hand',
+          note: d.reason ? `Money Borrowed from ${d.person}: ${d.reason}` : `Money Borrowed from ${d.person}`,
+          type: 'incoming',
+        });
+      } else if (d.type === 'lent' && Array.isArray(d.history)) {
+        // Receiving repayment on lent debt is an inflow
+        for (const h of d.history) {
+          list.push({
+            id: `debt_repay_inc_${h.id}`,
+            date: h.date,
+            amount: h.amount,
+            stored: h.account || d.account || 'Cash in Hand',
+            note: `Repayment from ${d.person}`,
+            type: 'incoming',
+          });
+        }
+      }
+    }
+    return list;
+  }, [debts]);
+
+  const allExpenses = React.useMemo(() => {
+    return [...expenses, ...lentExpenses].sort((a, b) => {
+      const timeDiff = parseDateToTimestamp(b.date) - parseDateToTimestamp(a.date);
+      if (timeDiff !== 0) return timeDiff;
+      return String(b.id).localeCompare(String(a.id));
+    });
+  }, [expenses, lentExpenses]);
+
+  const allIncomes = React.useMemo(() => {
+    return [...incomes, ...borrowedIncomes].sort((a, b) => {
+      const timeDiff = parseDateToTimestamp(b.date) - parseDateToTimestamp(a.date);
+      if (timeDiff !== 0) return timeDiff;
+      return String(b.id).localeCompare(String(a.id));
+    });
+  }, [incomes, borrowedIncomes]);
+
+  const filteredExpenses = allExpenses.filter((e) => matchesMonth(e.date));
+  const filteredIncomes = allIncomes.filter((i) => matchesMonth(i.date));
   const filteredTransactions = transactions.filter((t) => matchesMonth(t.date));
   const filteredTransfers = transfers.filter((tr) => matchesMonth(tr.date));
 
@@ -816,6 +1087,12 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     expenses.forEach((e) => addDate(e.date));
     incomes.forEach((i) => addDate(i.date));
+    debts.forEach((d) => {
+      addDate(d.date);
+      if (Array.isArray(d.history)) {
+        d.history.forEach((h) => addDate(h.date));
+      }
+    });
     transactions.forEach((t) => addDate(t.date));
 
     const monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -830,7 +1107,7 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     });
 
     return [{ key: 'ALL', label: '🌐 All Time' }, ...list];
-  }, [expenses, incomes, transactions]);
+  }, [expenses, incomes, debts, transactions]);
 
   const setSelectedMonthSafe = (m: string) => {
     const cur = getCurrentMonthKey();
@@ -862,6 +1139,16 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     if (!monthKey || monthKey === 'ALL') return false;
     if (forceList.includes(monthKey)) return true;
 
+    const [y, m] = monthKey.split('-');
+    const paydayDay = (paydayDayStr || '1').padStart(2, '0');
+    const salaryDate = `${y}-${m}-${paydayDay}`;
+
+    // If user is using the app for first time and base salary was before today,
+    // do not add or consider loaded for anything before today's date!
+    if (salaryStartDate && salaryDate < salaryStartDate) {
+      return false;
+    }
+
     const currentMonth = getCurrentMonthKey();
     if (monthKey < currentMonth) return true;
     if (monthKey > currentMonth) return false;
@@ -877,7 +1164,7 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const isSalaryLoaded = useMemo(() => {
     if (!hasBaseSalary || salary <= 0) return false;
     return isSalaryLoadedForMonth(activeMonthKey, baseSalaryDate, manuallyLoadedMonths);
-  }, [hasBaseSalary, salary, activeMonthKey, baseSalaryDate, manuallyLoadedMonths]);
+  }, [hasBaseSalary, salary, activeMonthKey, baseSalaryDate, manuallyLoadedMonths, salaryStartDate]);
 
   const daysUntilPayday = useMemo(() => {
     if (!hasBaseSalary || salary <= 0) return 0;
@@ -891,8 +1178,15 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
     }
     const payday = parseInt(baseSalaryDate || '1', 10);
-    const todayDay = new Date().getDate();
-    return Math.max(0, payday - todayDay);
+    const today = new Date();
+    const todayDay = today.getDate();
+    if (todayDay <= payday) {
+      return payday - todayDay;
+    }
+    // Payday already passed this month! Next payday is on next month's payday date
+    const nextMonthPayday = new Date(today.getFullYear(), today.getMonth() + 1, payday);
+    const diff = nextMonthPayday.getTime() - today.getTime();
+    return Math.max(1, Math.ceil(diff / (1000 * 60 * 60 * 24)));
   }, [hasBaseSalary, salary, activeMonthKey, baseSalaryDate]);
 
   const getSalaryForMonth = useCallback(
@@ -1184,9 +1478,17 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const cfg = getSalaryForMonth(targetMonth);
       ensureBaseSalaryIncome(targetMonth, cfg.amount, cfg.day, manuallyLoadedMonths);
     }
-  }, [isDbLoaded, selectedMonth, hasBaseSalary, salary, baseSalaryDate, salaryAccountId, manuallyLoadedMonths, creditedSalaryMonths]);
+  }, [isDbLoaded, selectedMonth, hasBaseSalary, salary, baseSalaryDate, salaryAccountId, manuallyLoadedMonths, creditedSalaryMonths, salaryStartDate]);
 
-  const configureBaseSalary = async (amount: number, dayStr: string, effectiveMonthKey?: string) => {
+  const configureBaseSalary = async (
+    amount: number,
+    dayStr: string,
+    effectiveMonthKey?: string,
+    designatedAccountId?: string
+  ) => {
+    const isEditing = hasBaseSalary === true && salary > 0;
+    const previousSalary = salary;
+    const previousAcc = accounts.find((a) => a.id === salaryAccountId);
     setSalary(amount);
     setHasBaseSalary(true);
     setBaseSalaryDate(dayStr);
@@ -1195,15 +1497,31 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     await saveAppSetting('has_base_salary', 'true');
     await saveAppSetting('base_salary_date', dayStr);
 
+    // If salary_start_date is not yet set, this is first-time configuration: record today's date!
+    let effectiveStartDate = salaryStartDate;
+    if (!effectiveStartDate) {
+      const today = new Date();
+      effectiveStartDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      setSalaryStartDateState(effectiveStartDate);
+      await saveAppSetting('salary_start_date', effectiveStartDate);
+    }
+
+    const accIdToUse = designatedAccountId || salaryAccountId;
+    if (accIdToUse) {
+      setSalaryAccountIdState(accIdToUse);
+      await saveAppSetting('salary_account_id', accIdToUse);
+    }
+
     const targetMonth = effectiveMonthKey || (selectedMonth === 'ALL' ? getCurrentMonthKey() : selectedMonth);
-    const targetSalaryAcc = salaryAccountId ? accounts.find((a) => a.id === salaryAccountId) : accounts[0];
+    const targetSalaryAcc = accIdToUse ? accounts.find((a) => a.id === accIdToUse) : accounts[0];
+    const targetAccName = targetSalaryAcc?.name || 'Cash in Hand';
     const rec: SalaryRecord = {
       id: `salary_rec_${targetMonth}`,
       month: targetMonth,
       amount,
       day: dayStr,
       accountId: targetSalaryAcc?.id,
-      accountName: targetSalaryAcc?.name || 'Cash in Hand',
+      accountName: targetAccName,
       createdAt: new Date().toISOString(),
     };
     await insertSalaryRecord(rec);
@@ -1211,6 +1529,34 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const filtered = prev.filter((s) => s.month !== targetMonth);
       return [...filtered, rec].sort((a, b) => a.month.localeCompare(b.month));
     });
+
+    const bankChanged = isEditing && previousAcc && previousAcc.name !== targetAccName;
+    const amountChanged = isEditing && previousSalary !== amount;
+    let logNote = 'Base salary configured';
+    if (isEditing) {
+      if (amountChanged && bankChanged) {
+        logNote = `Adjusted from ${currencySymbol} ${previousSalary.toLocaleString()} • Bank changed from ${previousAcc?.name || 'Account'} to ${targetAccName}`;
+      } else if (bankChanged) {
+        logNote = `Deposit bank changed from ${previousAcc?.name || 'Account'} to ${targetAccName}`;
+      } else if (amountChanged) {
+        logNote = `Adjusted from ${currencySymbol} ${previousSalary.toLocaleString()}`;
+      } else {
+        logNote = 'Base salary configuration updated';
+      }
+    }
+
+    // Record audit log entry
+    const logItem: SalaryLog = {
+      id: `sal_log_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+      action: isEditing ? 'updated' : 'added',
+      amount,
+      day: dayStr,
+      accountName: targetAccName,
+      timestamp: new Date().toISOString(),
+      note: logNote,
+    };
+    insertSalaryLog(logItem).catch(() => {});
+    setSalaryLogs((prev) => [logItem, ...prev]);
 
     ensureBaseSalaryIncome(targetMonth, amount, dayStr);
   };
@@ -1233,9 +1579,14 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   };
 
-  const setCashInHandInitialMoney = async (newInitial: number) => {
+  const setCashInHandInitialMoney = async (newInitial: number): Promise<boolean> => {
+    if (hasSetInitialCash) {
+      Alert.alert('Initial Money Already Set', 'Initial opening balance can only be added once.');
+      return false;
+    }
     const delta = newInitial - initialCashInHand;
     setInitialCashInHand(newInitial);
+    setHasSetInitialCash(true);
     await saveInitialCashInHand(newInitial);
 
     // Directly adjust Cash in Hand account balance by the initial money delta WITHOUT creating any transaction
@@ -1249,9 +1600,15 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         return acc;
       })
     );
+    return true;
   };
 
   const skipBaseSalary = async () => {
+    const prevSalary = salary;
+    const prevDay = baseSalaryDate;
+    const targetSalaryAcc = accounts.find((a) => a.id === salaryAccountId) || accounts[0];
+    const targetAccName = targetSalaryAcc?.name || 'Cash in Hand';
+
     setHasBaseSalary(false);
     setSalary(0);
     setManuallyLoadedMonths([]);
@@ -1266,6 +1623,19 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       toRemove.forEach((r) => removeIncome(r.id));
       return prev.filter((i) => !i.note.toLowerCase().includes('monthly base salary'));
     });
+
+    // Record audit log entry for removal
+    const logItem: SalaryLog = {
+      id: `sal_log_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+      action: 'removed',
+      amount: prevSalary,
+      day: prevDay,
+      accountName: targetAccName,
+      timestamp: new Date().toISOString(),
+      note: 'Base salary removed by user',
+    };
+    insertSalaryLog(logItem).catch(() => {});
+    setSalaryLogs((prev) => [logItem, ...prev]);
   };
 
   // Mutations
@@ -1436,8 +1806,10 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     });
   };
 
-  const recordInstallment = (debtId: string, amount: number, account: string) => {
-    const dateStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  const recordInstallment = (debtId: string, amount: number, account: string, customDate?: string) => {
+    const dateStr = customDate && customDate.trim()
+      ? customDate.trim()
+      : new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
     const targetDebt = debts.find((d) => d.id === debtId);
     if (!targetDebt) return;
 
@@ -1505,17 +1877,119 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     insertWishlistItem(newItem);
   };
 
-  const toggleWishlistPurchased = (id: string) => {
+  const completeWishlistItem = (
+    id: string,
+    details: {
+      completedDate: string;
+      sourceAccount: string;
+      deductMoney?: boolean;
+    }
+  ) => {
+    const item = wishlist.find((w) => w.id === id);
+    if (!item) return;
+
+    let createdExpenseId: string | undefined = undefined;
+
+    // Deduct money & log in transactions
+    if (details.deductMoney !== false && item.price > 0 && details.sourceAccount) {
+      const newExpId = `wish_${Date.now()}`;
+      createdExpenseId = newExpId;
+      const expenseItem: Expense = {
+        id: newExpId,
+        date: details.completedDate,
+        category: 'Wishlist',
+        amount: item.price,
+        reason: `Wishlist: ${item.name}`,
+        stored: details.sourceAccount,
+        type: 'outgoing',
+      };
+      setExpenses((prev) => [expenseItem, ...prev]);
+      insertExpense(expenseItem);
+
+      // Log master transaction
+      const sourceAcc = accounts.find((a) => a.name.toLowerCase() === details.sourceAccount.toLowerCase());
+      addTransaction({
+        id: `tx_exp_${newExpId}`,
+        date: details.completedDate,
+        type: 'Expense',
+        amount: item.price,
+        from: details.sourceAccount,
+        to: 'Wishlist',
+        reference: `Wishlist: ${item.name}`,
+        category: 'Wishlist',
+        accountId: sourceAcc?.id,
+      });
+
+      // Deduct account balance
+      setAccounts((prev) =>
+        prev.map((acc) => {
+          if (acc.name.toLowerCase() === details.sourceAccount.toLowerCase()) {
+            const updated = { ...acc, balance: acc.balance - item.price };
+            updateAccountInDB(updated);
+            return updated;
+          }
+          return acc;
+        })
+      );
+    }
+
     setWishlist((prev) =>
-      prev.map((item) => {
-        if (item.id === id) {
-          const updated = { ...item, isPurchased: !item.isPurchased };
-          updateWishlistPurchased(id, updated.isPurchased);
+      prev.map((w) => {
+        if (w.id === id) {
+          const updated: WishlistItem = {
+            ...w,
+            isPurchased: true,
+            completedDate: details.completedDate,
+            sourceAccount: details.sourceAccount,
+            expenseId: createdExpenseId || w.expenseId,
+          };
+          updateWishlistPurchased(id, true, updated.completedDate, updated.sourceAccount, updated.expenseId);
           return updated;
         }
-        return item;
+        return w;
       })
     );
+  };
+
+  const uncompleteWishlistItem = (id: string) => {
+    const item = wishlist.find((w) => w.id === id);
+    if (!item) return;
+
+    if (item.expenseId) {
+      deleteExpense(item.expenseId);
+    }
+
+    setWishlist((prev) =>
+      prev.map((w) => {
+        if (w.id === id) {
+          const updated: WishlistItem = {
+            ...w,
+            isPurchased: false,
+            completedDate: undefined,
+            sourceAccount: undefined,
+            expenseId: undefined,
+          };
+          updateWishlistPurchased(id, false, undefined, undefined, undefined);
+          return updated;
+        }
+        return w;
+      })
+    );
+  };
+
+  const toggleWishlistPurchased = (id: string) => {
+    const item = wishlist.find((w) => w.id === id);
+    if (!item) return;
+    if (item.isPurchased) {
+      uncompleteWishlistItem(id);
+    } else {
+      const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+      completeWishlistItem(id, {
+        completedDate: today,
+        sourceAccount: accounts[0]?.name || 'Cash in Hand',
+        deductMoney: true,
+      });
+    }
   };
 
   const deleteWishlistItem = (id: string) => {
@@ -1618,6 +2092,11 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const deleteIncome = (id: string) => {
+    if (id.startsWith('debt_borrowed_')) {
+      const debtId = id.replace('debt_borrowed_', '');
+      deleteDebt(debtId);
+      return;
+    }
     const target = incomes.find((item) => item.id === id);
     setIncomes((prev) => prev.filter((item) => String(item.id) !== String(id)));
     removeIncome(id).catch((err) => console.error('Failed to remove income:', err));
@@ -1687,6 +2166,11 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const deleteExpense = (id: string) => {
+    if (id.startsWith('debt_lent_')) {
+      const debtId = id.replace('debt_lent_', '');
+      deleteDebt(debtId);
+      return;
+    }
     const target = expenses.find((item) => item.id === id);
     setExpenses((prev) => prev.filter((item) => String(item.id) !== String(id)));
     removeExpense(id).catch((err) => console.error('Failed to remove expense:', err));
@@ -1841,6 +2325,7 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setThemeState('kawaii');
       setStickerPackState('totoro');
       setCurrencySymbolState('Rs.');
+      setCustomCurrencies([]);
       setShowMonthlyBillsState(true);
 
       // Reset Financial States
@@ -1863,6 +2348,7 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setTransactions([]);
       setSalaries([]);
       setInitialCashInHand(0);
+      setHasSetInitialCash(false);
       setSalaryAccountIdState(null);
       setManuallyLoadedMonths([]);
       setCreditedSalaryMonths([]);
@@ -1915,6 +2401,7 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setAdminPinState(loaded.adminPin || '1234');
     setAccountPinState(loaded.accountPin || loaded.pinCode || '1234');
     setRecoveryEmailState(loaded.recoveryEmail || '');
+    setSalaryStartDateState(loaded.salaryStartDate || '');
     setSalaryAccountIdState(loaded.salaryAccountId || null);
     const isFinished = loaded.hasCompletedOnboarding ?? false;
     setHasCompletedOnboarding(isFinished);
@@ -1932,6 +2419,7 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setTransactions(loaded.transactions);
     setSalaries(loaded.salaries || []);
     setInitialCashInHand(loaded.initialCashInHand || 0);
+    setHasSetInitialCash(loaded.hasSetInitialCash || (loaded.initialCashInHand ? loaded.initialCashInHand > 0 : false));
   };
 
   const exportDataBackup = async (): Promise<string> => {
@@ -1961,10 +2449,13 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         salary,
         hasBaseSalary,
         baseSalaryDate,
+        salaryStartDate,
         configureBaseSalary,
         skipBaseSalary,
         salaries,
+        salaryLogs,
         initialCashInHand,
+        hasSetInitialCash,
         showMonthlyBills,
         setShowMonthlyBills,
         toggleShowMonthlyBills,
@@ -2013,6 +2504,9 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         totalEnvelopesBudgeted,
         currencySymbol,
         setCurrencySymbol,
+        customCurrencies,
+        addCustomCurrency,
+        removeCustomCurrency,
         setTheme,
         setStickerPack,
         unlockVault,
@@ -2051,6 +2545,8 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         addWishlistItem,
         updateWishlistItem,
         toggleWishlistPurchased,
+        completeWishlistItem,
+        uncompleteWishlistItem,
         deleteWishlistItem,
         addAccount,
         updateAccount,
@@ -2066,6 +2562,10 @@ export const FinancialProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         exportDataBackup,
         importDataBackup,
         reloadAllDataFromDB,
+        isBackupModalOpen,
+        backupModalMode,
+        openBackupModal,
+        closeBackupModal,
       }}
     >
       {children}

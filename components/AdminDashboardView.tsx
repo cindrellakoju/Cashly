@@ -21,6 +21,7 @@ import { PRESET_OPTIONS, AppTheme, STICKER_PACKS, StickerPack } from '@/constant
 import { ThemeHeader } from './ThemeHeader';
 import { AestheticModal } from './AestheticModal';
 import { DatePickerFieldModal } from './DatePickerFieldModal';
+import { MonthDropdownModal } from './MonthDropdownModal';
 import { BaseSalarySetupModal } from './BaseSalarySetupModal';
 import { EmailVerificationModal } from './EmailVerificationModal';
 import { TotoroSticker } from './TotoroStickers';
@@ -34,8 +35,30 @@ const CURRENCY_PRESETS = [
   { symbol: '¥', label: '¥' },
 ];
 
+const formatExactLogDate = (isoStr?: string): string => {
+  if (!isoStr) return '';
+  try {
+    const d = new Date(isoStr);
+    if (isNaN(d.getTime())) return isoStr;
+    const day = String(d.getDate()).padStart(2, '0');
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const month = months[d.getMonth()];
+    const year = d.getFullYear();
+    let hours = d.getHours();
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    const strHours = String(hours).padStart(2, '0');
+    return `${day} ${month} ${year}, ${strHours}:${minutes} ${ampm}`;
+  } catch (e) {
+    return isoStr;
+  }
+};
+
 export const AdminDashboardView: React.FC = () => {
   const [isAdminDatePickerOpen, setIsAdminDatePickerOpen] = useState(false);
+  const [isAdminMonthPickerOpen, setIsAdminMonthPickerOpen] = useState(false);
   const [isSalaryAdminModalOpen, setIsSalaryAdminModalOpen] = useState(false);
 
   // Initial Money Modal State
@@ -74,6 +97,9 @@ export const AdminDashboardView: React.FC = () => {
     baseSalaryDate,
     currencySymbol,
     setCurrencySymbol,
+    customCurrencies,
+    addCustomCurrency,
+    removeCustomCurrency,
     adminPin,
     accountPin,
     setAdminPin,
@@ -83,7 +109,9 @@ export const AdminDashboardView: React.FC = () => {
     configureBaseSalary,
     skipBaseSalary,
     salaries,
+    salaryLogs,
     initialCashInHand,
+    hasSetInitialCash,
     setCashInHandInitialMoney,
     updateSalaryRecord,
     deleteSalaryRecord,
@@ -135,6 +163,7 @@ export const AdminDashboardView: React.FC = () => {
     toggleShowMonthlyBills,
     recoveryEmail,
     setRecoveryEmail,
+    openBackupModal,
   } = useFinancial();
 
   const handleOpenChangePin = (target: 'admin' | 'account') => {
@@ -273,31 +302,57 @@ export const AdminDashboardView: React.FC = () => {
 
   const handleConfirmImport = async () => {
     if (!importJsonInput.trim()) {
-      Alert.alert('Empty Input', 'Please select a backup file or paste JSON data to restore.');
+      Alert.alert('No File Selected', 'Please select a backup file (.json) to restore.');
       return;
     }
 
-    try {
-      setIsImporting(true);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-      const result = await importDataBackup(importJsonInput.trim());
+    const hasExpenses = expenses && expenses.length > 0;
+    const hasIncomes = incomes && incomes.length > 0;
+    const hasDebts = debts && debts.length > 0;
+    const hasSalaries = salaries && salaries.length > 0;
+    const hasCustomAccounts =
+      accounts &&
+      accounts.some(
+        (a) => a.balance > 0 || (a.name.toLowerCase() !== 'cash in hand' && a.name.toLowerCase() !== 'main account')
+      );
+    const hasData = Boolean(hasExpenses || hasIncomes || hasDebts || hasSalaries || hasCustomAccounts);
 
-      if (result.success) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        setIsImportModalOpen(false);
-        setImportJsonInput('');
-        setImportStatusMessage(null);
-        Alert.alert(
-          '🎉 Restore Successful!',
-          `All your previous data has been restored!\n\n${result.counts ? `${result.counts.accounts} accounts, ${result.counts.expenses} expenses, ${result.counts.incomes} incomes restored.` : ''}`
-        );
-      } else {
-        Alert.alert('Import Failed', result.message || 'Invalid JSON backup format.');
+    const runImport = async () => {
+      try {
+        setIsImporting(true);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        const result = await importDataBackup(importJsonInput.trim());
+
+        if (result.success) {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          setIsImportModalOpen(false);
+          setImportJsonInput('');
+          setImportStatusMessage(null);
+          Alert.alert(
+            '🎉 Restore Successful!',
+            `All your previous data has been restored!\n\n${result.counts ? `${result.counts.accounts} accounts, ${result.counts.expenses} expenses, ${result.counts.incomes} incomes restored.` : ''}`
+          );
+        } else {
+          Alert.alert('Import Failed', result.message || 'Invalid JSON backup format.');
+        }
+      } catch (err: any) {
+        Alert.alert('Import Error', err?.message || 'Failed to restore database.');
+      } finally {
+        setIsImporting(false);
       }
-    } catch (err: any) {
-      Alert.alert('Import Error', err?.message || 'Failed to restore database.');
-    } finally {
-      setIsImporting(false);
+    };
+
+    if (hasData) {
+      Alert.alert(
+        'Override Existing Data?',
+        'New data will override your previous one. Are you sure you want to proceed?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Override & Restore', style: 'destructive', onPress: runImport },
+        ]
+      );
+    } else {
+      await runImport();
     }
   };
   const [activeTableTab, setActiveTableTab] = useState<
@@ -769,8 +824,8 @@ export const AdminDashboardView: React.FC = () => {
         imageStyle={{ opacity: 0.65 }}
       >
         <ThemeHeader
-          title="Admin Control Panel 🛠️"
-          subtitle="Manage database tables & inspect system storage"
+          title="Admin Control Panel"
+          subtitle="Manage database tables"
           stickerKey="vault"
         />
         <ScrollView
@@ -784,7 +839,7 @@ export const AdminDashboardView: React.FC = () => {
             <TotoroSticker type="star" size={32} style={{ position: 'absolute', top: -12, right: 14, zIndex: 10 }} />
             <View style={styles.sectionHeaderRow}>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.sectionTitle, { color: colors.textMain }]}>Mascot Sticker Pack 🧸</Text>
+                <Text style={[styles.sectionTitle, { color: colors.textMain }]}>Sticker Pack</Text>
                 <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 2 }}>
                   Active Pack: {STICKER_PACKS.find((p) => p.id === stickerPack)?.name || 'Totoro'}
                 </Text>
@@ -829,9 +884,6 @@ export const AdminDashboardView: React.FC = () => {
                     >
                       {pack.name.split(' ')[0]}
                     </Text>
-                    <Text style={{ fontSize: 11, color: isSelected ? colors.textOnAccent : colors.textMuted, marginTop: 2 }}>
-                      {pack.previewEmoji}
-                    </Text>
                     {isSelected && (
                       <View style={{ marginTop: 4, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 6, backgroundColor: colors.primaryGreenLight }}>
                         <Text style={{ fontSize: 9, fontWeight: '900', color: colors.primaryGreen }}>ACTIVE</Text>
@@ -845,1034 +897,1176 @@ export const AdminDashboardView: React.FC = () => {
 
           {/* 🎨 App Theme & Style Configuration Card */}
           <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft, position: 'relative', overflow: 'visible' }]}>
-            <TotoroSticker type="leaf" size={44} style={{ position: 'absolute', top: -14, right: 14, zIndex: 10 }} />
-          <View style={styles.sectionHeaderRow}>
-            <View style={{ flex: 1 }}>
-              <View
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'flex-start',
-                  justifyContent: 'space-between',
-                  gap: 8,
-                }}
-              >
-                <Text
-                  style={[
-                    styles.sectionTitle,
-                    {
-                      color: colors.textMain,
-                      flex: 1,
-                      flexShrink: 1,
-                    },
-                  ]}
-                >
-                  App Theme & Style
-                </Text>
+            <View style={styles.sectionHeaderRow}>
+              <View style={{ flex: 1 }}>
                 <View
                   style={{
-                    backgroundColor: colors.primaryAccentLight || '#fff4e6',
-                    paddingHorizontal: 8,
-                    paddingVertical: 3,
-                    borderRadius: 8,
-                    flexShrink: 0,
-                    marginTop: 2,
+                    flexDirection: 'row',
+                    alignItems: 'flex-start',
+                    justifyContent: 'space-between',
+                    gap: 8,
                   }}
                 >
                   <Text
-                    style={{
-                      fontSize: 11,
-                      fontWeight: '800',
-                      color: colors.primaryAccent,
-                    }}
-                    numberOfLines={1}
+                    style={[
+                      styles.sectionTitle,
+                      {
+                        color: colors.textMain,
+                        flex: 1,
+                        flexShrink: 1,
+                      },
+                    ]}
                   >
-                    ACTIVE: {colors.badge?.toUpperCase()}
+                    App Theme & Style
                   </Text>
+                  <View
+                    style={{
+                      backgroundColor: colors.primaryAccentLight || '#fff4e6',
+                      paddingHorizontal: 8,
+                      paddingVertical: 3,
+                      borderRadius: 8,
+                      flexShrink: 0,
+                      marginTop: 2,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        fontWeight: '800',
+                        color: colors.primaryAccent,
+                      }}
+                      numberOfLines={1}
+                    >
+                      ACTIVE: {colors.badge?.toUpperCase()}
+                    </Text>
+                  </View>
                 </View>
               </View>
             </View>
+
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 12 }}>
+              {PRESET_OPTIONS.map((opt) => {
+                const isSelected = theme === opt.id || (theme === 'noir' && opt.id === 'midnight');
+                return (
+                  <TouchableOpacity
+                    key={opt.id}
+                    activeOpacity={0.8}
+                    onPress={async () => {
+                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                      await setTheme(opt.id);
+                    }}
+                    style={[
+                      styles.themeChoiceCard,
+                      {
+                        width: '48%',
+                        flex: 0,
+                        backgroundColor: colors.bgSecondary,
+                        borderColor: isSelected ? colors.primaryAccent : colors.borderSoft,
+                        borderWidth: 0,
+                        ...(isSelected ? colors.cardShadow : {}),
+                      },
+                    ]}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <Text style={[styles.themeChoiceName, { color: colors.textMain, marginTop: 0, flexShrink: 1 }]}>
+                        {opt.label}
+                      </Text>
+                      {isSelected ? (
+                        <View style={[styles.activePillSmall, { backgroundColor: colors.primaryGreenLight || '#e4f5e4', flexShrink: 0 }]}>
+                          <Text style={[styles.activePillSmallText, { color: colors.primaryGreen }]}>ACTIVE</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </View>
 
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 12 }}>
-            {PRESET_OPTIONS.map((opt) => {
-              const isSelected = theme === opt.id || (theme === 'noir' && opt.id === 'midnight');
-              return (
-                <TouchableOpacity
-                  key={opt.id}
-                  activeOpacity={0.8}
-                  onPress={async () => {
-                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                    await setTheme(opt.id);
+          {/* 💱 Currency Metric & Symbol Configuration Card */}
+          <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft }]}>
+            <View style={styles.sectionHeaderRow}>
+              <View style={{ flex: 1 }}>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'flex-start',
+                    justifyContent: 'space-between',
+                    gap: 8,
                   }}
+                >
+                  <Text
+                    style={[
+                      styles.sectionTitle,
+                      {
+                        color: colors.textMain,
+                        flex: 1,
+                        flexShrink: 1,
+                      },
+                    ]}
+                  >
+                    Currency Metric & Symbol
+                  </Text>
+                  <View
+                    style={{
+                      backgroundColor: colors.primaryAccentLight || '#fff4e6',
+                      paddingHorizontal: 8,
+                      paddingVertical: 3,
+                      borderRadius: 8,
+                      flexShrink: 0,
+                      marginTop: 2,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        fontWeight: '800',
+                        color: colors.primaryAccent,
+                      }}
+                      numberOfLines={1}
+                    >
+                      ACTIVE: {currencySymbol}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={[styles.sectionSubtitle, { color: colors.textMuted, marginTop: 4 }]}>
+                  Select the unit and display metric used across dashboards, recurring bills, ledgers, and transactions.
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.currencyAdminChipsRow}>
+              {CURRENCY_PRESETS.map((item) => {
+                const isSelected = !isCustomAdminCurrency && currencySymbol === item.symbol;
+                return (
+                  <TouchableOpacity
+                    key={item.symbol}
+                    onPress={async () => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setIsCustomAdminCurrency(false);
+                      await setCurrencySymbol(item.symbol);
+                    }}
+                    style={[
+                      styles.currencyAdminChip,
+                      {
+                        backgroundColor: isSelected ? colors.primaryAccent : colors.bgSecondary,
+                        borderColor: isSelected ? colors.primaryAccent : colors.borderSoft,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.currencyAdminChipText,
+                        { color: isSelected ? colors.textOnAccent : colors.textMain },
+                      ]}
+                    >
+                      {item.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+
+              {/* Saved Custom Currency Metrics shown beside Rs., $ */}
+              {customCurrencies.map((customSym) => {
+                const isSelected = !isCustomAdminCurrency && currencySymbol === customSym;
+                return (
+                  <View key={customSym} style={{ position: 'relative', overflow: 'visible' }}>
+                    <TouchableOpacity
+                      onPress={async () => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setIsCustomAdminCurrency(false);
+                        await setCurrencySymbol(customSym);
+                      }}
+                      style={[
+                        styles.currencyAdminChip,
+                        {
+                          backgroundColor: isSelected ? colors.primaryAccent : colors.bgSecondary,
+                          borderColor: isSelected ? colors.primaryAccent : colors.borderSoft,
+                          paddingRight: 18,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.currencyAdminChipText,
+                          { color: isSelected ? colors.textOnAccent : colors.textMain },
+                        ]}
+                      >
+                        {customSym}
+                      </Text>
+                    </TouchableOpacity>
+
+                    {/* - sign on top to remove it */}
+                    <TouchableOpacity
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      onPress={async (e) => {
+                        e?.stopPropagation?.();
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                        await removeCustomCurrency(customSym);
+                      }}
+                      style={styles.currencyRemoveBtn}
+                    >
+                      <Text style={styles.currencyRemoveBtnText}>-</Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+
+              <TouchableOpacity
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setIsCustomAdminCurrency(!isCustomAdminCurrency);
+                  setCustomAdminCurrencyInput(
+                    CURRENCY_PRESETS.some((c) => c.symbol === currencySymbol) ? '' : currencySymbol
+                  );
+                }}
+                style={[
+                  styles.currencyAdminChip,
+                  {
+                    backgroundColor: isCustomAdminCurrency ? colors.primaryAccent : colors.bgSecondary,
+                    borderColor: isCustomAdminCurrency ? colors.primaryAccent : colors.borderSoft,
+                  },
+                ]}
+              >
+                <Text
                   style={[
-                    styles.themeChoiceCard,
+                    styles.currencyAdminChipText,
+                    { color: isCustomAdminCurrency ? colors.textOnAccent : colors.textMain },
+                  ]}
+                >
+                  + Custom...
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {isCustomAdminCurrency && (
+              <View style={styles.customAdminCurrencyRow}>
+                <TextInput
+                  style={[
+                    styles.customAdminCurrencyInput,
                     {
-                      width: '48%',
-                      flex: 0,
                       backgroundColor: colors.bgSecondary,
-                      borderColor: isSelected ? colors.primaryAccent : colors.borderSoft,
-                      borderWidth: 0,
-                      ...(isSelected ? colors.cardShadow : {}),
-                    },
-                  ]}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Text style={{ fontSize: 22 }}>{opt.badge.split(' ')[0]}</Text>
-                    {isSelected ? (
-                      <View style={[styles.activePillSmall, { backgroundColor: colors.primaryGreenLight || '#e4f5e4' }]}>
-                        <Text style={[styles.activePillSmallText, { color: colors.primaryGreen }]}>ACTIVE</Text>
-                      </View>
-                    ) : null}
-                  </View>
-                  <Text style={[styles.themeChoiceName, { color: colors.textMain }]}>{opt.label}</Text>
-                  <Text style={{ fontSize: 10, color: colors.textMuted, marginTop: 1 }} numberOfLines={1}>
-                    {opt.subtitle}
-                  </Text>
-                  <View style={{ flexDirection: 'row', gap: 4, marginTop: 4 }}>
-                    {opt.dots.map((d, i) => (
-                      <View key={i} style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: d }} />
-                    ))}
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-
-        {/* 💱 Currency Metric & Symbol Configuration Card */}
-        <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft }]}>
-          <View style={styles.sectionHeaderRow}>
-            <View style={{ flex: 1 }}>
-              <View
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'flex-start',
-                  justifyContent: 'space-between',
-                  gap: 8,
-                }}
-              >
-                <Text
-                  style={[
-                    styles.sectionTitle,
-                    {
                       color: colors.textMain,
-                      flex: 1,
-                      flexShrink: 1,
+                      borderColor: colors.borderSoft,
                     },
                   ]}
+                  value={customAdminCurrencyInput}
+                  onChangeText={setCustomAdminCurrencyInput}
+                  placeholder="e.g. NPR, CAD, CHF, ৳"
+                  placeholderTextColor={colors.textMuted}
+                  maxLength={8}
+                />
+                <TouchableOpacity
+                  onPress={async () => {
+                    const val = customAdminCurrencyInput.trim();
+                    if (val) {
+                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                      await addCustomCurrency(val);
+                      setIsCustomAdminCurrency(false);
+                      setCustomAdminCurrencyInput('');
+                      Alert.alert('Currency Saved', `"${val}" added to currency metrics and set as active.`);
+                    }
+                  }}
+                  style={[
+                    styles.customAdminCurrencySaveBtn,
+                    { backgroundColor: colors.primaryAccent },
+                  ]}
                 >
-                  Currency Metric & Symbol
-                </Text>
+                  <Text style={[styles.customAdminCurrencySaveBtnText, { color: colors.textOnAccent }]}>Save</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+
+          {/* 💼 Base Salary Administration Card */}
+          <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft }]}>
+            <View style={styles.sectionHeaderRow}>
+              <View style={{ flex: 1 }}>
                 <View
                   style={{
-                    backgroundColor: colors.primaryAccentLight || '#fff4e6',
-                    paddingHorizontal: 8,
-                    paddingVertical: 3,
-                    borderRadius: 8,
-                    flexShrink: 0,
-                    marginTop: 2,
+                    flexDirection: 'row',
+                    alignItems: 'flex-start',
+                    justifyContent: 'space-between',
+                    gap: 8,
                   }}
                 >
                   <Text
-                    style={{
-                      fontSize: 11,
-                      fontWeight: '800',
-                      color: colors.primaryAccent,
-                    }}
-                    numberOfLines={1}
+                    style={[
+                      styles.sectionTitle,
+                      {
+                        color: colors.textMain,
+                        flex: 1,
+                        flexShrink: 1,
+                      },
+                    ]}
                   >
-                    ACTIVE: {currencySymbol}
+                    Base Salary Configuration
+                  </Text>
+                  <View
+                    style={{
+                      backgroundColor: hasBaseSalary ? colors.primaryGreenLight : colors.bgSecondary,
+                      paddingHorizontal: 8,
+                      paddingVertical: 3,
+                      borderRadius: 8,
+                      flexShrink: 0,
+                      marginTop: 2,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        fontWeight: '800',
+                        color: hasBaseSalary ? colors.primaryGreen : colors.textMuted,
+                      }}
+                      numberOfLines={1}
+                    >
+                      {hasBaseSalary ? 'ACTIVE 🟢' : 'DISABLED ⚪'}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={[styles.sectionSubtitle, { color: colors.textMuted, marginTop: 4 }]}>
+                  {hasBaseSalary
+                    ? `Auto-deposits ${currencySymbol} ${salary.toLocaleString()} into your Income on day ${baseSalaryDate} every month.`
+                    : 'No fixed base salary configured.'}
+                </Text>
+                <Text style={[styles.sectionSubtitle, { color: colors.textMuted, marginTop: 4 }]}>
+                  {!hasBaseSalary && (`Salary are logged directly as Total Income`)}
+                </Text>
+
+              </View>
+            </View>
+
+            {hasBaseSalary ? (
+              <View>
+                <View style={styles.salaryAdminDetailsRow}>
+                  <View style={[styles.salaryAdminStat, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
+                    <Text style={[styles.salaryAdminStatLabel, { color: colors.textMuted }]}>Monthly Salary</Text>
+                    <Text style={[styles.salaryAdminStatVal, { color: colors.textMain }]}>{currencySymbol} {salary.toLocaleString()}</Text>
+                  </View>
+                  <View style={[styles.salaryAdminStat, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
+                    <Text style={[styles.salaryAdminStatLabel, { color: colors.textMuted }]}>Payday Date</Text>
+                    <Text style={[styles.salaryAdminStatVal, { color: colors.primaryGreen }]}>
+                      {baseSalaryDate ? `${baseSalaryDate}th of month` : '1st of month'}
+                    </Text>
+                  </View>
+                </View>
+                {/* Salary Bank Destination Selection */}
+                <View style={[styles.salaryBankRow, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
+                  <View style={{ flex: 1, marginRight: 8 }}>
+                    <Text style={[styles.salaryBankLabel, { color: colors.textMuted }]}>Salary Deposit Bank Account</Text>
+                    <Text style={[styles.salaryBankVal, { color: colors.textMain }]}>
+                      {accounts.find((a) => a.id === salaryAccountId)?.name || 'Not Designated (Cash in Hand)'}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setIsSalaryBankModalOpen(true)}
+                    style={[styles.selectBankBtn, { backgroundColor: colors.primaryAccentLight }]}
+                  >
+                    <Text style={[styles.selectBankBtnText, { color: colors.primaryAccent }]}>Choose Bank 💼</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : null}
+
+
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+              <TouchableOpacity
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setIsSalaryAdminModalOpen(true);
+                }}
+                style={[
+                  styles.inspectDbBtn,
+                  {
+                    flex: 1,
+                    backgroundColor: colors.primaryAccent,
+                    borderColor: colors.borderAccent || colors.primaryAccent,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.inspectDbBtnText,
+                    { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') },
+                  ]}
+                >
+                  {hasBaseSalary ? 'Edit Base Salary' : 'Add Base Salary'}
+                </Text>
+              </TouchableOpacity>
+
+              {hasBaseSalary && (
+                <TouchableOpacity
+                  onPress={() => {
+                    Alert.alert(
+                      'Remove Base Salary?',
+                      'This will switch your dashboard to track Total Income directly and stop auto-depositing monthly base salary.',
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                          text: 'Remove',
+                          style: 'destructive',
+                          onPress: async () => {
+                            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                            await skipBaseSalary();
+                          },
+                        },
+                      ]
+                    );
+                  }}
+                  style={[
+                    styles.inspectDbBtn,
+                    {
+                      flex: 0.8,
+                      backgroundColor: colors.dangerLight || '#FFEBEB',
+                      borderColor: colors.danger,
+                    },
+                  ]}
+                >
+                  <Ionicons name="close-circle-outline" size={16} color={colors.danger} />
+                  <Text style={[styles.inspectDbBtnText, { color: colors.danger }]}>Remove Salary</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Permanent Salary Configuration Audit Log Box */}
+            <View
+              style={{
+                marginTop: 16,
+                padding: 14,
+                borderRadius: 16,
+                backgroundColor: colors.bgSecondary,
+                borderColor: colors.borderSoft,
+                borderWidth: 0,
+              }}
+            >
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  marginBottom: 10,
+                  gap: 8,
+                }}
+              >
+                <View style={{ flex: 1, minWidth: 0, marginRight: 6 }}>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textMain }} numberOfLines={1}>
+                    Salary Configuration Logs
+                  </Text>
+                  <Text style={{ fontSize: 11, color: colors.textMuted }} numberOfLines={1} ellipsizeMode="tail">
+                    Permanent audit history • Cannot be deleted
+                  </Text>
+                </View>
+                <View
+                  style={{
+                    paddingHorizontal: 8,
+                    paddingVertical: 3,
+                    borderRadius: 8,
+                    backgroundColor: colors.bgCard,
+                  }}
+                >
+                  <Text style={{ fontSize: 10, fontWeight: '800', color: colors.textMuted }}>
+                    {salaryLogs.length} {salaryLogs.length === 1 ? 'LOG' : 'LOGS'}
                   </Text>
                 </View>
               </View>
-              <Text style={[styles.sectionSubtitle, { color: colors.textMuted, marginTop: 4 }]}>
-                Select the unit and display metric used across dashboards, recurring bills, ledgers, and transactions.
-              </Text>
+
+              {salaryLogs.length === 0 ? (
+                <View style={{ padding: 14, borderRadius: 12, backgroundColor: colors.bgCard, alignItems: 'center' }}>
+                  <Text style={{ fontSize: 12, color: colors.textMuted }}>No salary configuration logs recorded yet.</Text>
+                </View>
+              ) : (
+                <View style={{ gap: 8 }}>
+                  {salaryLogs.map((log) => {
+                    const isAdded = log.action === 'added';
+                    const isRemoved = log.action === 'removed';
+
+                    const badgeBg = isAdded
+                      ? (colors.primaryGreenLight || '#eaf4eb')
+                      : isRemoved
+                        ? (colors.dangerLight || '#FFEBEB')
+                        : (colors.primaryAccentLight || '#fff4e6');
+                    const badgeColor = isAdded
+                      ? colors.primaryGreen
+                      : isRemoved
+                        ? colors.danger
+                        : colors.primaryAccent;
+                    const actionLabel = isAdded ? 'ADDED' : isRemoved ? 'REMOVED' : 'UPDATED';
+                    const actionIcon = isAdded ? 'add-circle' : isRemoved ? 'close-circle' : 'pencil';
+
+                    return (
+                      <View
+                        key={log.id}
+                        style={{
+                          padding: 12,
+                          borderRadius: 12,
+                          backgroundColor: colors.bgCard,
+                          borderColor: colors.borderSoft,
+                          borderWidth: 0,
+                        }}
+                      >
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <View
+                              style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                gap: 4,
+                                paddingHorizontal: 7,
+                                paddingVertical: 2,
+                                borderRadius: 6,
+                                backgroundColor: badgeBg,
+                              }}
+                            >
+                              <Ionicons name={actionIcon as any} size={11} color={badgeColor} />
+                              <Text style={{ fontSize: 10, fontWeight: '800', color: badgeColor }}>
+                                {actionLabel}
+                              </Text>
+                            </View>
+                            {log.amount !== undefined && log.amount > 0 && !isRemoved && (
+                              <Text style={{ fontSize: 13, fontWeight: '800', color: colors.textMain }}>
+                                {currencySymbol} {log.amount.toLocaleString()}
+                              </Text>
+                            )}
+                          </View>
+
+                          {/* Exact date & time of the log */}
+                          <Text style={{ fontSize: 11, fontWeight: '600', color: colors.textMuted }}>
+                            {formatExactLogDate(log.timestamp)}
+                          </Text>
+                        </View>
+
+                        <View style={{ marginTop: 2 }}>
+                          {isRemoved ? (
+                            <Text style={{ fontSize: 11, color: colors.danger, fontWeight: '600' }}>
+                              Base salary removed and disabled {log.amount ? `(was ${currencySymbol} ${log.amount.toLocaleString()})` : ''}
+                            </Text>
+                          ) : (
+                            <Text style={{ fontSize: 11, color: colors.textMuted }}>
+                              Payday: <Text style={{ color: colors.textMain, fontWeight: '700' }}>Day {log.day || '1'}</Text> • Account: <Text style={{ color: colors.textMain, fontWeight: '700' }}>{log.accountName || 'Cash in Hand'}</Text>
+                            </Text>
+                          )}
+                          {log.note && (
+                            <Text style={{ fontSize: 10, color: colors.textSubtle, marginTop: 3 }}>
+                              {log.note}
+                            </Text>
+                          )}
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
             </View>
           </View>
 
-          <View style={styles.currencyAdminChipsRow}>
-            {CURRENCY_PRESETS.map((item) => {
-              const isSelected = !isCustomAdminCurrency && currencySymbol === item.symbol;
-              return (
+          {/* 🔐 Security & PIN Management Card */}
+          <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft }]}>
+            <View style={styles.sectionHeaderRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.sectionTitle, { color: colors.textMain }]}> Security & PIN Settings</Text>
+                <Text style={[styles.sectionSubtitle, { color: colors.textMuted }]}>
+                  Manage PIN codes for Admin Access and Account Vault
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.pinCardsContainer}>
+              {/* Admin PIN Box */}
+              <View style={[styles.pinBox, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
+                <View style={styles.pinBoxHeader}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={[styles.pinBoxTitle, { color: colors.textMain }]}>Admin PIN</Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setShowAdminPin(!showAdminPin)}
+                    style={styles.eyeBtn}
+                  >
+                    <Ionicons
+                      name={showAdminPin ? 'eye-off-outline' : 'eye-outline'}
+                      size={18}
+                      color={colors.textMuted}
+                    />
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={[styles.pinDisplayValue, { color: colors.primaryAccent }]}>
+                  {showAdminPin ? adminPin : '••••'}
+                </Text>
+
                 <TouchableOpacity
-                  key={item.symbol}
-                  onPress={async () => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    setIsCustomAdminCurrency(false);
-                    await setCurrencySymbol(item.symbol);
-                  }}
+                  onPress={() => handleOpenChangePin('admin')}
+                  style={[styles.changePinBtn, { backgroundColor: colors.primaryAccent }]}
+                >
+                  <Text style={[styles.changePinBtnText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}>
+                    Change Admin PIN
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Account PIN Box */}
+              <View style={[styles.pinBox, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
+                <View style={styles.pinBoxHeader}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={[styles.pinBoxTitle, { color: colors.textMain }]}>Account PIN</Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setShowAccountPin(!showAccountPin)}
+                    style={styles.eyeBtn}
+                  >
+                    <Ionicons
+                      name={showAccountPin ? 'eye-off-outline' : 'eye-outline'}
+                      size={18}
+                      color={colors.textMuted}
+                    />
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={[styles.pinDisplayValue, { color: colors.primaryGreen }]}>
+                  {showAccountPin ? accountPin : '••••'}
+                </Text>
+
+                <TouchableOpacity
+                  onPress={() => handleOpenChangePin('account')}
+                  style={[styles.changePinBtn, { backgroundColor: colors.primaryAccent }]}
+                >
+                  <Text style={[styles.changePinBtnText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}>
+                    Change Account PIN
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* ✉️ Recovery Email Management Box */}
+            <View
+              style={[
+                styles.recoveryEmailBox,
+                {
+                  backgroundColor: colors.bgSecondary,
+                  borderColor: colors.borderSoft,
+                },
+              ]}
+            >
+              <View style={styles.recoveryEmailHeader}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                  <Text style={{ fontSize: 16 }}>✉️</Text>
+                  <Text style={[styles.recoveryEmailTitle, { color: colors.textMain }]}>
+                    Recovery Email
+                  </Text>
+                </View>
+                <View
                   style={[
-                    styles.currencyAdminChip,
+                    styles.recoveryStatusBadge,
                     {
-                      backgroundColor: isSelected ? colors.primaryAccent : colors.bgSecondary,
-                      borderColor: isSelected ? colors.primaryAccent : colors.borderSoft,
+                      backgroundColor: recoveryEmail ? (colors.primaryGreenLight || '#e4f5e4') : colors.bgCard,
+                      borderColor: recoveryEmail ? colors.primaryGreen : colors.borderSoft,
                     },
                   ]}
                 >
                   <Text
                     style={[
-                      styles.currencyAdminChipText,
-                      { color: isSelected ? colors.textOnAccent : colors.textMain },
+                      styles.recoveryStatusText,
+                      { color: recoveryEmail ? colors.primaryGreen : colors.textMuted },
                     ]}
                   >
-                    {item.label}
+                    {recoveryEmail ? 'LINKED ' : 'NOT LINKED'}
+                  </Text>
+                </View>
+              </View>
+
+              <Text style={[styles.recoveryEmailSubtitle, { color: colors.textMuted }]}>
+                {recoveryEmail
+                  ? `Linked: ${recoveryEmail}. Used to recover forgotten Admin and Account PINs.`
+                  : 'Link an email to recover your Admin or Account PIN if forgotten'}
+              </Text>
+
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => {
+                    setIsLinkEmailModalOpen(true);
+                  }}
+                  style={[styles.linkEmailBtn, { backgroundColor: colors.primaryAccent, flex: 1 }]}
+                >
+                  <Ionicons name="mail" size={14} color={colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214')} />
+                  <Text style={[styles.linkEmailBtnText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}>
+                    {recoveryEmail ? 'Change Recovery Email' : 'Link Recovery Email'}
                   </Text>
                 </TouchableOpacity>
-              );
-            })}
-            <TouchableOpacity
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setIsCustomAdminCurrency(true);
-                setCustomAdminCurrencyInput(
-                  CURRENCY_PRESETS.some((c) => c.symbol === currencySymbol) ? '' : currencySymbol
-                );
-              }}
-              style={[
-                styles.currencyAdminChip,
-                {
-                  backgroundColor: isCustomAdminCurrency ? colors.primaryAccent : colors.bgSecondary,
-                  borderColor: isCustomAdminCurrency ? colors.primaryAccent : colors.borderSoft,
-                },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.currencyAdminChipText,
-                  { color: isCustomAdminCurrency ? colors.textOnAccent : colors.textMain },
-                ]}
-              >
-                Custom...
-              </Text>
-            </TouchableOpacity>
+              </View>
+            </View>
           </View>
 
-          {isCustomAdminCurrency && (
-            <View style={styles.customAdminCurrencyRow}>
-              <TextInput
-                style={[
-                  styles.customAdminCurrencyInput,
-                  {
-                    backgroundColor: colors.bgSecondary,
-                    color: colors.textMain,
-                    borderColor: colors.borderSoft,
-                  },
-                ]}
-                value={customAdminCurrencyInput}
-                onChangeText={setCustomAdminCurrencyInput}
-                placeholder="e.g. NPR, USD, CHF, ৳"
-                placeholderTextColor={colors.textMuted}
-                maxLength={6}
-              />
-              <TouchableOpacity
-                onPress={async () => {
-                  if (customAdminCurrencyInput.trim()) {
-                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                    await setCurrencySymbol(customAdminCurrencyInput.trim());
-                    Alert.alert('Currency Updated', `Active metric updated to "${customAdminCurrencyInput.trim()}"`);
-                  }
-                }}
-                style={[
-                  styles.customAdminCurrencySaveBtn,
-                  { backgroundColor: colors.primaryAccent },
-                ]}
-              >
-                <Text style={[styles.customAdminCurrencySaveBtnText, { color: colors.textOnAccent }]}>Save</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-
-        {/* 💼 Base Salary Administration Card */}
-        <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft }]}>
-          <View style={styles.sectionHeaderRow}>
-            <View style={{ flex: 1 }}>
-              <View
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'flex-start',
-                  justifyContent: 'space-between',
-                  gap: 8,
-                }}
-              >
-                <Text
-                  style={[
-                    styles.sectionTitle,
-                    {
-                      color: colors.textMain,
-                      flex: 1,
-                      flexShrink: 1,
-                    },
-                  ]}
-                >
-                  Base Salary Configuration
-                </Text>
+          {/* Monthly Recurring Bills & Utilities Visibility Control Card */}
+          <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft }]}>
+            <View style={styles.sectionHeaderRow}>
+              <View style={{ flex: 1 }}>
                 <View
                   style={{
-                    backgroundColor: hasBaseSalary ? colors.primaryGreenLight : colors.bgSecondary,
-                    paddingHorizontal: 8,
-                    paddingVertical: 3,
-                    borderRadius: 8,
-                    flexShrink: 0,
-                    marginTop: 2,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: 8,
                   }}
                 >
                   <Text
-                    style={{
-                      fontSize: 11,
-                      fontWeight: '800',
-                      color: hasBaseSalary ? colors.primaryGreen : colors.textMuted,
-                    }}
-                    numberOfLines={1}
+                    style={[
+                      styles.sectionTitle,
+                      { color: colors.textMain, flexShrink: 1 },
+                    ]}
                   >
-                    {hasBaseSalary ? 'ACTIVE 🟢' : 'DISABLED ⚪'}
+                    Recurring Bills & Utilities
                   </Text>
-                </View>
-              </View>
-              <Text style={[styles.sectionSubtitle, { color: colors.textMuted, marginTop: 4 }]}>
-                {hasBaseSalary
-                  ? `Auto-deposits ${currencySymbol} ${salary.toLocaleString()} into your Income on day ${baseSalaryDate} every month.`
-                  : 'No fixed base salary configured.'}
-              </Text>
-              <Text style={[styles.sectionSubtitle, { color: colors.textMuted, marginTop: 4 }]}>
-                {!hasBaseSalary && (`Salary are logged directly as Total Income`)}
-              </Text>
 
-            </View>
-          </View>
+                  <View
+                    style={{
+                      backgroundColor: showMonthlyBills
+                        ? (colors.primaryGreenLight || '#e4f5e4')
+                        : (colors.dangerLight || '#FFEBEB'),
+                      paddingHorizontal: 8,
+                      paddingVertical: 3,
+                      borderRadius: 8,
+                      flexShrink: 0,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 10,
+                        fontWeight: '800',
+                        color: showMonthlyBills ? colors.primaryGreen : colors.danger,
+                        letterSpacing: 0.5,
+                      }}
+                    >
+                      {showMonthlyBills ? 'ACTIVE' : 'HIDDEN'}
+                    </Text>
+                  </View>
+                </View>
 
-          {hasBaseSalary ? (
-            <View>
-              <View style={styles.salaryAdminDetailsRow}>
-                <View style={[styles.salaryAdminStat, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
-                  <Text style={[styles.salaryAdminStatLabel, { color: colors.textMuted }]}>Monthly Salary</Text>
-                  <Text style={[styles.salaryAdminStatVal, { color: colors.textMain }]}>{currencySymbol} {salary.toLocaleString()}</Text>
-                </View>
-                <View style={[styles.salaryAdminStat, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
-                  <Text style={[styles.salaryAdminStatLabel, { color: colors.textMuted }]}>Payday Date</Text>
-                  <Text style={[styles.salaryAdminStatVal, { color: colors.primaryGreen }]}>
-                    {baseSalaryDate ? `${baseSalaryDate}th of month` : '1st of month'}
-                  </Text>
-                </View>
-              </View>
-              {/* Salary Bank Destination Selection */}
-              <View style={[styles.salaryBankRow, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
-                <View style={{ flex: 1, marginRight: 8 }}>
-                  <Text style={[styles.salaryBankLabel, { color: colors.textMuted }]}>Salary Deposit Bank Account</Text>
-                  <Text style={[styles.salaryBankVal, { color: colors.textMain }]}>
-                    {accounts.find((a) => a.id === salaryAccountId)?.name || 'Not Designated (Cash in Hand)'}
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  onPress={() => setIsSalaryBankModalOpen(true)}
-                  style={[styles.selectBankBtn, { backgroundColor: colors.primaryAccentLight }]}
+                <Text
+                  style={[
+                    styles.sectionSubtitle,
+                    { color: colors.textMuted, marginTop: 4 },
+                  ]}
                 >
-                  <Text style={[styles.selectBankBtnText, { color: colors.primaryAccent }]}>Choose Bank 💼</Text>
-                </TouchableOpacity>
+                  Control whether the Monthly Recurring Bills & Utilities card (Rent,
+                  Electricity, Groceries, etc.) is shown or hidden across the app.
+                </Text>
               </View>
             </View>
-          ) : null}
 
-
-          <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
-            <TouchableOpacity
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setIsSalaryAdminModalOpen(true);
-              }}
-              style={[
-                styles.inspectDbBtn,
-                {
-                  flex: 1,
-                  backgroundColor: colors.primaryAccent,
-                  borderColor: colors.borderAccent || colors.primaryAccent,
-                },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.inspectDbBtnText,
-                  { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') },
-                ]}
-              >
-                {hasBaseSalary ? 'Edit Salary & Payday' : 'Add Base Salary'}
-              </Text>
-            </TouchableOpacity>
-
-            {hasBaseSalary && (
+            {/* Button below the description */}
+            <View style={{ alignItems: 'flex-end', marginTop: 12 }}>
               <TouchableOpacity
+                activeOpacity={0.8}
                 onPress={() => {
-                  Alert.alert(
-                    'Remove Base Salary?',
-                    'This will switch your dashboard to track Total Income directly and stop auto-depositing monthly base salary.',
-                    [
-                      { text: 'Cancel', style: 'cancel' },
-                      {
-                        text: 'Remove',
-                        style: 'destructive',
-                        onPress: async () => {
-                          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-                          await skipBaseSalary();
-                        },
-                      },
-                    ]
-                  );
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  toggleShowMonthlyBills();
                 }}
-                style={[
-                  styles.inspectDbBtn,
-                  {
-                    flex: 0.8,
-                    backgroundColor: colors.dangerLight || '#FFEBEB',
-                    borderColor: colors.danger,
-                  },
-                ]}
-              >
-                <Ionicons name="close-circle-outline" size={16} color={colors.danger} />
-                <Text style={[styles.inspectDbBtnText, { color: colors.danger }]}>Remove Salary</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Salary History Over Time */}
-          <View style={{ marginTop: 16, paddingTop: 14, borderTopWidth: 0 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-              <View>
-                <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textMain }}>
-                  Salary Change History
-                </Text>
-                <Text style={{ fontSize: 11, color: colors.textMuted }}>
-                  Track when your salary changed and how much it was
-                </Text>
-              </View>
-              <TouchableOpacity
-                onPress={handleOpenAddSalary}
                 style={{
+                  width: '100%',
                   flexDirection: 'row',
                   alignItems: 'center',
-                  gap: 4,
-                  paddingHorizontal: 10,
-                  paddingVertical: 5,
-                  borderRadius: 10,
-                  backgroundColor: colors.primaryAccentLight || '#fff4e6',
+                  justifyContent: 'center',
+                  gap: 6,
+                  backgroundColor: showMonthlyBills
+                    ? colors.primaryAccent
+                    : colors.bgCard,
+                  borderWidth: 0,
+                  borderColor: 'transparent',
+                  paddingVertical: 10,
+                  borderRadius: 12,
                 }}
               >
-                <Ionicons name="add-circle" size={13} color={colors.primaryAccent} />
-                <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primaryAccent }}>Add Month</Text>
+                <Ionicons
+                  name={showMonthlyBills ? 'eye' : 'eye-off'}
+                  size={16}
+                  color={showMonthlyBills ? colors.textOnAccent : colors.textMain}
+                />
+
+                <Text
+                  style={{
+                    fontSize: 12,
+                    fontWeight: '800',
+                    color: showMonthlyBills ? colors.textOnAccent : colors.textMain,
+                    textAlign: 'center',
+                  }}
+                >
+                  {showMonthlyBills ? 'Showing' : 'Hidden'}
+                </Text>
               </TouchableOpacity>
             </View>
+          </View>
 
-            {salaries.length === 0 ? (
-              <View style={{ padding: 12, borderRadius: 12, backgroundColor: colors.bgSecondary, alignItems: 'center' }}>
-                <Text style={{ fontSize: 12, color: colors.textMuted }}>No salary timeline records stored yet.</Text>
+          {/* 🗃️ Master Admin Database CRUD Table Explorer */}
+          <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft }]}>
+            <View style={styles.sectionHeaderRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.sectionTitle, { color: colors.textMain }]}>Manage Records</Text>
+                <Text style={[styles.sectionSubtitle, { color: colors.textMuted }]}>
+                  Viewing, editing, and deleting saved records
+                </Text>
               </View>
-            ) : (
-              <View style={{ gap: 8 }}>
-                {[...salaries].sort((a, b) => b.month.localeCompare(a.month)).map((sal) => (
-                  <View
-                    key={sal.id}
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: 10,
-                      borderRadius: 12,
-                      backgroundColor: colors.bgSecondary,
-                      borderWidth: 0,
-                      borderColor: 'transparent',
-                    }}
-                  >
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                        <Text style={{ fontSize: 13, fontWeight: '800', color: colors.textMain }}>{sal.month}</Text>
-                        <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, backgroundColor: colors.primaryGreenLight || '#eaf4eb' }}>
-                          <Text style={{ fontSize: 10, fontWeight: '700', color: colors.primaryGreen }}>Day {sal.day}</Text>
-                        </View>
-                      </View>
-                      <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 2 }}>
-                        {sal.accountName || accounts.find((a) => a.id === sal.accountId)?.name || 'Cash in Hand'}
-                      </Text>
-                    </View>
+            </View>
 
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                      <Text style={{ fontSize: 13, fontWeight: '800', color: colors.primaryGreen }}>
-                        {currencySymbol} {sal.amount.toLocaleString()}
-                      </Text>
-                      <TouchableOpacity
-                        onPress={() => handleOpenEditSalary(sal)}
-                        style={[styles.actionIconButton, { backgroundColor: colors.bgCard, width: 28, height: 28 }]}
-                      >
-                        <Ionicons name="pencil" size={13} color={colors.textMain} />
+            {/* Horizontal Table Switcher Tabs */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
+              {[
+                { key: 'categories', label: 'Categories' },
+                { key: 'envelopes', label: showMonthlyBills ? 'Recurring Bills' : 'Recurring Bills (Hidden)' },
+                { key: 'accounts', label: 'Accounts' },
+                { key: 'expenses', label: 'Expenses' },
+                { key: 'incomes', label: 'Incomes' },
+                { key: 'debts', label: 'Debts' },
+                { key: 'wishlist', label: 'Wishlist' },
+                { key: 'transfers', label: 'Transfers' },
+                { key: 'transactions', label: 'Log Transactions' },
+                { key: 'salaries', label: 'Salaries' },
+              ].map((tab) => {
+                const isSelected = activeTableTab === tab.key;
+                return (
+                  <TouchableOpacity
+                    key={tab.key}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setActiveTableTab(tab.key as any);
+                    }}
+                    style={[
+                      styles.choiceChip,
+                      {
+                        backgroundColor: isSelected ? colors.primaryAccent : colors.bgSecondary,
+                        borderColor: 'transparent',
+                        borderWidth: 0,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.chipText,
+                        { color: isSelected ? colors.textOnAccent : colors.textMain, fontWeight: isSelected ? '800' : '600' },
+                      ]}
+                    >
+                      {tab.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            {/* ----------------- TABLE 1: CATEGORIES ----------------- */}
+            {activeTableTab === 'categories' && (
+              <View>
+                <View style={styles.tableHeaderRowAction}>
+                  <Text style={[styles.tableSubHeader, { color: colors.textMuted }]}>Categories ({categories.length})</Text>
+                  <TouchableOpacity onPress={handleOpenAddCategory} style={[styles.addCatBtn, { backgroundColor: colors.primaryAccent }]}>
+                    <Ionicons name="add-circle" size={14} color={colors.textOnAccent} />
+                    <Text style={[styles.addCatBtnText, { color: colors.textOnAccent }]}>Add Tag</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={[styles.tableRow, styles.tableHeaderRow, { backgroundColor: colors.bgSecondary }]}>
+                  <Text style={[styles.colHeader, { flex: 1, color: colors.textMuted }]}>EMOJI</Text>
+                  <Text style={[styles.colHeader, { flex: 3, color: colors.textMuted }]}>NAME</Text>
+                  <Text style={[styles.colHeader, { flex: 1.5, color: colors.textMuted, textAlign: 'center' }]}>COLOR</Text>
+                  <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted, textAlign: 'right' }]}>ACTIONS</Text>
+                </View>
+                {categories.map((cat) => (
+                  <View key={cat.id} style={[styles.tableRow, { borderBottomColor: colors.borderSoft }]}>
+                    <Text style={{ flex: 1, fontSize: 18 }}>{cat.emoji || '🏷️'}</Text>
+                    <Text style={[styles.themeName, { flex: 3, color: colors.textMain }]} numberOfLines={1}>{cat.name}</Text>
+                    <View style={{ flex: 1.5, alignItems: 'center' }}>
+                      <View style={[styles.colorSwatch, { backgroundColor: cat.color || '#f48295' }]} />
+                    </View>
+                    <View style={{ flex: 2, flexDirection: 'row', justifyContent: 'flex-end', gap: 6 }}>
+                      <TouchableOpacity onPress={() => handleOpenEditCategory(cat)} style={[styles.actionIconButton, { backgroundColor: colors.bgSecondary }]}>
+                        <Ionicons name="pencil" size={14} color={colors.textMain} />
                       </TouchableOpacity>
                       <TouchableOpacity
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        onPress={() =>
-                          handleConfirmDelete(
-                            'Delete Salary Record? 💼',
-                            `Remove salary entry for ${sal.month} (${currencySymbol} ${sal.amount.toLocaleString()})?`,
-                            () => deleteSalaryRecord(sal.id)
-                          )
-                        }
-                        style={[styles.actionIconButton, { backgroundColor: colors.dangerLight || '#FFEBEB', width: 28, height: 28 }]}
+                        onPress={() => handleDeleteCategory(cat)}
+                        style={[styles.actionIconButton, { backgroundColor: colors.dangerLight || '#FFEBEB' }]}
                       >
-                        <Ionicons name="trash-outline" size={13} color={colors.danger} />
+                        <Ionicons name="trash-outline" size={15} color={colors.danger} />
                       </TouchableOpacity>
                     </View>
                   </View>
                 ))}
               </View>
             )}
-          </View>
-        </View>
 
-        {/* 🔐 Security & PIN Management Card */}
-        <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft }]}>
-          <View style={styles.sectionHeaderRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.sectionTitle, { color: colors.textMain }]}> Security & PIN Settings</Text>
-              <Text style={[styles.sectionSubtitle, { color: colors.textMuted }]}>
-                Manage PIN codes for Admin Access and Account Vault
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.pinCardsContainer}>
-            {/* Admin PIN Box */}
-            <View style={[styles.pinBox, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
-              <View style={styles.pinBoxHeader}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Text style={[styles.pinBoxTitle, { color: colors.textMain }]}>Admin PIN</Text>
+            {/* ----------------- TABLE 2: RECURRING BILLS & UTILITIES ----------------- */}
+            {activeTableTab === 'envelopes' && (
+              <View>
+                <View style={styles.tableHeaderRowAction}>
+                  <Text style={[styles.tableSubHeader, { color: colors.textMuted, flex: 1, flexShrink: 1, marginRight: 8 }]}>Monthly Recurring Bills & Utilities ({envelopes.length})</Text>
+                  <TouchableOpacity onPress={handleOpenAddEnvelope} style={[styles.addCatBtn, { backgroundColor: colors.primaryAccent, flexShrink: 0 }]}>
+                    <Ionicons name="add-circle" size={14} color={colors.textOnAccent} />
+                    <Text style={[styles.addCatBtnText, { color: colors.textOnAccent }]}>Add Recurring Bill</Text>
+                  </TouchableOpacity>
                 </View>
-                <TouchableOpacity
-                  onPress={() => setShowAdminPin(!showAdminPin)}
-                  style={styles.eyeBtn}
-                >
-                  <Ionicons
-                    name={showAdminPin ? 'eye-off-outline' : 'eye-outline'}
-                    size={18}
-                    color={colors.textMuted}
-                  />
-                </TouchableOpacity>
-              </View>
 
-              <Text style={[styles.pinDisplayValue, { color: colors.primaryAccent }]}>
-                {showAdminPin ? adminPin : '••••'}
-              </Text>
-
-              <TouchableOpacity
-                onPress={() => handleOpenChangePin('admin')}
-                style={[styles.changePinBtn, { backgroundColor: colors.primaryAccent }]}
-              >
-                <Text style={[styles.changePinBtnText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}>
-                  Change Admin PIN
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Account PIN Box */}
-            <View style={[styles.pinBox, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
-              <View style={styles.pinBoxHeader}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Text style={[styles.pinBoxTitle, { color: colors.textMain }]}>Account PIN</Text>
-                </View>
-                <TouchableOpacity
-                  onPress={() => setShowAccountPin(!showAccountPin)}
-                  style={styles.eyeBtn}
-                >
-                  <Ionicons
-                    name={showAccountPin ? 'eye-off-outline' : 'eye-outline'}
-                    size={18}
-                    color={colors.textMuted}
-                  />
-                </TouchableOpacity>
-              </View>
-
-              <Text style={[styles.pinDisplayValue, { color: colors.primaryGreen }]}>
-                {showAccountPin ? accountPin : '••••'}
-              </Text>
-
-              <TouchableOpacity
-                onPress={() => handleOpenChangePin('account')}
-                style={[styles.changePinBtn, { backgroundColor: colors.primaryAccent }]}
-              >
-                <Text style={[styles.changePinBtnText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}>
-                  Change Account PIN
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* ✉️ Recovery Email Management Box */}
-          <View
-            style={[
-              styles.recoveryEmailBox,
-              {
-                backgroundColor: colors.bgSecondary,
-                borderColor: colors.borderSoft,
-              },
-            ]}
-          >
-            <View style={styles.recoveryEmailHeader}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
-                <Text style={{ fontSize: 16 }}>✉️</Text>
-                <Text style={[styles.recoveryEmailTitle, { color: colors.textMain }]}>
-                  Recovery Email
-                </Text>
-              </View>
-              <View
-                style={[
-                  styles.recoveryStatusBadge,
-                  {
-                    backgroundColor: recoveryEmail ? (colors.primaryGreenLight || '#e4f5e4') : colors.bgCard,
-                    borderColor: recoveryEmail ? colors.primaryGreen : colors.borderSoft,
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.recoveryStatusText,
-                    { color: recoveryEmail ? colors.primaryGreen : colors.textMuted },
-                  ]}
-                >
-                  {recoveryEmail ? 'LINKED ' : 'NOT LINKED'}
-                </Text>
-              </View>
-            </View>
-
-            <Text style={[styles.recoveryEmailSubtitle, { color: colors.textMuted }]}>
-              {recoveryEmail
-                ? `Linked: ${recoveryEmail}. Used to recover forgotten Admin and Account PINs.`
-                : 'Link an email to recover your Admin or Account PIN if forgotten'}
-            </Text>
-
-            <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
-              <TouchableOpacity
-                activeOpacity={0.8}
-                onPress={() => {
-                  setIsLinkEmailModalOpen(true);
-                }}
-                style={[styles.linkEmailBtn, { backgroundColor: colors.primaryAccent, flex: 1 }]}
-              >
-                <Ionicons name="mail" size={14} color={colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214')} />
-                <Text style={[styles.linkEmailBtnText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}>
-                  {recoveryEmail ? 'Change Recovery Email' : 'Link Recovery Email'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-
-        {/* Monthly Recurring Bills & Utilities Visibility Control Card */}
-        <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft }]}>
-          <View style={styles.sectionHeaderRow}>
-            <View style={{ flex: 1 }}>
-              <View
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  flexWrap: 'wrap',
-                  gap: 8,
-                }}
-              >
-                <Text
-                  style={[
-                    styles.sectionTitle,
-                    { color: colors.textMain, flexShrink: 1 },
-                  ]}
-                >
-                  Recurring Bills & Utilities
-                </Text>
-
+                {/* Quick Visibility Switch Banner inside Table */}
                 <View
                   style={{
-                    backgroundColor: showMonthlyBills
-                      ? (colors.primaryGreenLight || '#e4f5e4')
-                      : (colors.dangerLight || '#FFEBEB'),
-                    paddingHorizontal: 8,
-                    paddingVertical: 3,
-                    borderRadius: 8,
-                    flexShrink: 0,
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontSize: 10,
-                      fontWeight: '800',
-                      color: showMonthlyBills ? colors.primaryGreen : colors.danger,
-                      letterSpacing: 0.5,
-                    }}
-                  >
-                    {showMonthlyBills ? 'ACTIVE' : 'HIDDEN'}
-                  </Text>
-                </View>
-              </View>
-
-              <Text
-                style={[
-                  styles.sectionSubtitle,
-                  { color: colors.textMuted, marginTop: 4 },
-                ]}
-              >
-                Control whether the Monthly Recurring Bills & Utilities card (Rent,
-                Electricity, Groceries, etc.) is shown or hidden across the app.
-              </Text>
-            </View>
-          </View>
-
-          {/* Button below the description */}
-          <View style={{ alignItems: 'flex-end', marginTop: 12 }}>
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                toggleShowMonthlyBills();
-              }}
-              style={{
-                width: '100%',
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 6,
-                backgroundColor: showMonthlyBills
-                  ? colors.primaryAccent
-                  : colors.bgCard,
-                borderWidth: 0,
-                borderColor: 'transparent',
-                paddingVertical: 10,
-                borderRadius: 12,
-              }}
-            >
-              <Ionicons
-                name={showMonthlyBills ? 'eye' : 'eye-off'}
-                size={16}
-                color={showMonthlyBills ? colors.textOnAccent : colors.textMain}
-              />
-
-              <Text
-                style={{
-                  fontSize: 12,
-                  fontWeight: '800',
-                  color: showMonthlyBills ? colors.textOnAccent : colors.textMain,
-                  textAlign: 'center',
-                }}
-              >
-                {showMonthlyBills ? 'Showing' : 'Hidden'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* 🗃️ Master Admin Database CRUD Table Explorer */}
-        <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft }]}>
-          <View style={styles.sectionHeaderRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.sectionTitle, { color: colors.textMain }]}>Manage Records</Text>
-              <Text style={[styles.sectionSubtitle, { color: colors.textMuted }]}>
-                Viewing, editing, and deleting saved records
-              </Text>
-            </View>
-          </View>
-
-          {/* Horizontal Table Switcher Tabs */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
-            {[
-              { key: 'categories', label: 'Categories' },
-              { key: 'envelopes', label: showMonthlyBills ? 'Recurring Bills' : 'Recurring Bills (Hidden)' },
-              { key: 'accounts', label: 'Accounts' },
-              { key: 'expenses', label: 'Expenses' },
-              { key: 'incomes', label: 'Incomes' },
-              { key: 'debts', label: 'Debts' },
-              { key: 'wishlist', label: 'Wishlist' },
-              { key: 'transfers', label: 'Transfers' },
-              { key: 'transactions', label: 'Log Transactions' },
-              { key: 'salaries', label: 'Salaries' },
-            ].map((tab) => {
-              const isSelected = activeTableTab === tab.key;
-              return (
-                <TouchableOpacity
-                  key={tab.key}
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    setActiveTableTab(tab.key as any);
-                  }}
-                  style={[
-                    styles.choiceChip,
-                    {
-                      backgroundColor: isSelected ? colors.primaryAccent : colors.bgSecondary,
-                      borderColor: 'transparent',
-                      borderWidth: 0,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.chipText,
-                      { color: isSelected ? colors.textOnAccent : colors.textMain, fontWeight: isSelected ? '800' : '600' },
-                    ]}
-                  >
-                    {tab.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-
-          {/* ----------------- TABLE 1: CATEGORIES ----------------- */}
-          {activeTableTab === 'categories' && (
-            <View>
-              <View style={styles.tableHeaderRowAction}>
-                <Text style={[styles.tableSubHeader, { color: colors.textMuted }]}>Categories ({categories.length})</Text>
-                <TouchableOpacity onPress={handleOpenAddCategory} style={[styles.addCatBtn, { backgroundColor: colors.primaryAccent }]}>
-                  <Ionicons name="add-circle" size={14} color={colors.textOnAccent} />
-                  <Text style={[styles.addCatBtnText, { color: colors.textOnAccent }]}>Add Tag</Text>
-                </TouchableOpacity>
-              </View>
-              <View style={[styles.tableRow, styles.tableHeaderRow, { backgroundColor: colors.bgSecondary }]}>
-                <Text style={[styles.colHeader, { flex: 1, color: colors.textMuted }]}>EMOJI</Text>
-                <Text style={[styles.colHeader, { flex: 3, color: colors.textMuted }]}>NAME</Text>
-                <Text style={[styles.colHeader, { flex: 1.5, color: colors.textMuted, textAlign: 'center' }]}>COLOR</Text>
-                <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted, textAlign: 'right' }]}>ACTIONS</Text>
-              </View>
-              {categories.map((cat) => (
-                <View key={cat.id} style={[styles.tableRow, { borderBottomColor: colors.borderSoft }]}>
-                  <Text style={{ flex: 1, fontSize: 18 }}>{cat.emoji || '🏷️'}</Text>
-                  <Text style={[styles.themeName, { flex: 3, color: colors.textMain }]} numberOfLines={1}>{cat.name}</Text>
-                  <View style={{ flex: 1.5, alignItems: 'center' }}>
-                    <View style={[styles.colorSwatch, { backgroundColor: cat.color || '#f48295' }]} />
-                  </View>
-                  <View style={{ flex: 2, flexDirection: 'row', justifyContent: 'flex-end', gap: 6 }}>
-                    <TouchableOpacity onPress={() => handleOpenEditCategory(cat)} style={[styles.actionIconButton, { backgroundColor: colors.bgSecondary }]}>
-                      <Ionicons name="pencil" size={14} color={colors.textMain} />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      onPress={() => handleDeleteCategory(cat)}
-                      style={[styles.actionIconButton, { backgroundColor: colors.dangerLight || '#FFEBEB' }]}
-                    >
-                      <Ionicons name="trash-outline" size={15} color={colors.danger} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ))}
-            </View>
-          )}
-
-          {/* ----------------- TABLE 2: RECURRING BILLS & UTILITIES ----------------- */}
-          {activeTableTab === 'envelopes' && (
-            <View>
-              <View style={styles.tableHeaderRowAction}>
-                <Text style={[styles.tableSubHeader, { color: colors.textMuted, flex: 1, flexShrink: 1, marginRight: 8 }]}>Monthly Recurring Bills & Utilities ({envelopes.length})</Text>
-                <TouchableOpacity onPress={handleOpenAddEnvelope} style={[styles.addCatBtn, { backgroundColor: colors.primaryAccent, flexShrink: 0 }]}>
-                  <Ionicons name="add-circle" size={14} color={colors.textOnAccent} />
-                  <Text style={[styles.addCatBtnText, { color: colors.textOnAccent }]}>Add Recurring Bill</Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Quick Visibility Switch Banner inside Table */}
-              <View
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  paddingHorizontal: 12,
-                  paddingVertical: 8,
-                  backgroundColor: colors.bgSecondary,
-                  borderRadius: 14,
-                  marginBottom: 10,
-                  borderWidth: 0,
-                  borderColor: 'transparent',
-                  gap: 8,
-                }}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, flexShrink: 1 }}>
-                  <Ionicons
-                    name={showMonthlyBills ? 'eye-outline' : 'eye-off-outline'}
-                    size={15}
-                    color={showMonthlyBills ? colors.primaryGreen : colors.danger}
-                  />
-                  <Text style={{ fontSize: 11, color: colors.textMuted, flexShrink: 1 }} numberOfLines={1}>
-                    Dashboard: <Text style={{ fontWeight: '800', color: showMonthlyBills ? colors.primaryGreen : colors.danger }}>{showMonthlyBills ? 'Visible to Users' : 'Hidden from Users'}</Text>
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    toggleShowMonthlyBills();
-                  }}
-                  style={{
-                    paddingHorizontal: 10,
-                    paddingVertical: 5,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    paddingHorizontal: 12,
+                    paddingVertical: 8,
+                    backgroundColor: colors.bgSecondary,
                     borderRadius: 14,
-                    backgroundColor: showMonthlyBills ? colors.bgCard : colors.primaryAccent,
+                    marginBottom: 10,
                     borderWidth: 0,
                     borderColor: 'transparent',
+                    gap: 8,
                   }}
                 >
-                  <Text
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, flexShrink: 1 }}>
+                    <Ionicons
+                      name={showMonthlyBills ? 'eye-outline' : 'eye-off-outline'}
+                      size={15}
+                      color={showMonthlyBills ? colors.primaryGreen : colors.danger}
+                    />
+                    <Text style={{ fontSize: 11, color: colors.textMuted, flexShrink: 1 }} numberOfLines={1}>
+                      Dashboard: <Text style={{ fontWeight: '800', color: showMonthlyBills ? colors.primaryGreen : colors.danger }}>{showMonthlyBills ? 'Visible to Users' : 'Hidden from Users'}</Text>
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      toggleShowMonthlyBills();
+                    }}
                     style={{
-                      fontSize: 11,
-                      fontWeight: '800',
-                      color: showMonthlyBills ? colors.textMain : colors.textOnAccent,
+                      paddingHorizontal: 10,
+                      paddingVertical: 5,
+                      borderRadius: 14,
+                      backgroundColor: showMonthlyBills ? colors.bgCard : colors.primaryAccent,
+                      borderWidth: 0,
+                      borderColor: 'transparent',
                     }}
                   >
-                    {showMonthlyBills ? 'Hide on Dashboard' : 'Show on Dashboard'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={[styles.tableRow, styles.tableHeaderRow, { backgroundColor: colors.bgSecondary }]}>
-                <Text style={[styles.colHeader, { flex: 1, color: colors.textMuted }]}>EMOJI</Text>
-                <Text style={[styles.colHeader, { flex: 2.5, color: colors.textMuted }]}>BILL / UTILITY</Text>
-                <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted }]}>MONTHLY BUDGET</Text>
-                <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted, textAlign: 'right' }]}>ACTIONS</Text>
-              </View>
-              {envelopes.map((env) => (
-                <View key={env.id} style={[styles.tableRow, { borderBottomColor: colors.borderSoft }]}>
-                  <Text style={{ flex: 1, fontSize: 18 }}>{env.emoji || '⚡'}</Text>
-                  <Text style={[styles.themeName, { flex: 2.5, color: colors.textMain }]} numberOfLines={1}>{env.name}</Text>
-                  <Text style={{ flex: 2, fontSize: 12, fontWeight: '700', color: colors.primaryGreen }}>{currencySymbol} {env.budgeted.toLocaleString()}</Text>
-                  <View style={{ flex: 2, flexDirection: 'row', justifyContent: 'flex-end', gap: 6 }}>
-                    <TouchableOpacity onPress={() => handleOpenEditEnvelope(env)} style={[styles.actionIconButton, { backgroundColor: colors.bgSecondary }]}>
-                      <Ionicons name="pencil" size={14} color={colors.textMain} />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      onPress={() =>
-                        handleConfirmDelete(
-                          'Delete Recurring Bill? ⚡',
-                          `Are you sure you want to delete recurring bill "${env.name}" (Budget: ${currencySymbol} ${env.budgeted.toLocaleString()})?`,
-                          () => deleteEnvelope(env.id)
-                        )
-                      }
-                      style={[styles.actionIconButton, { backgroundColor: colors.dangerLight || '#FFEBEB' }]}
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        fontWeight: '800',
+                        color: showMonthlyBills ? colors.textMain : colors.textOnAccent,
+                      }}
                     >
-                      <Ionicons name="trash-outline" size={15} color={colors.danger} />
-                    </TouchableOpacity>
-                  </View>
+                      {showMonthlyBills ? 'Hide on Dashboard' : 'Show on Dashboard'}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
-              ))}
-            </View>
-          )}
 
-          {/* ----------------- TABLE 3: ACCOUNTS ----------------- */}
-          {activeTableTab === 'accounts' && (
-            <View>
-              <View style={styles.tableHeaderRowAction}>
-                <Text style={[styles.tableSubHeader, { color: colors.textMuted }]}>Accounts ({accounts.length})</Text>
-                <TouchableOpacity onPress={handleOpenAddAccount} style={[styles.addCatBtn, { backgroundColor: colors.primaryAccent }]}>
-                  <Ionicons name="add-circle" size={14} color={colors.textOnAccent} />
-                  <Text style={[styles.addCatBtnText, { color: colors.textOnAccent }]}>Add Account</Text>
-                </TouchableOpacity>
-              </View>
-              <View style={[styles.tableRow, styles.tableHeaderRow, { backgroundColor: colors.bgSecondary }]}>
-                <Text style={[styles.colHeader, { flex: 1, color: colors.textMuted }]}>EMOJI</Text>
-                <Text style={[styles.colHeader, { flex: 2.5, color: colors.textMuted }]}>NAME</Text>
-                <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted }]}>BALANCE</Text>
-                <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted, textAlign: 'right' }]}>ACTIONS</Text>
-              </View>
-              {accounts.map((acc) => (
-                <View key={acc.id} style={[styles.tableRow, { borderBottomColor: colors.borderSoft }]}>
-                  <Text style={{ flex: 1, fontSize: 18 }}>{acc.emoji || '💳'}</Text>
-                  <View style={{ flex: 2.5 }}>
-                    <Text style={[styles.themeName, { color: colors.textMain }]} numberOfLines={1}>{acc.name}</Text>
-                    {acc.name.toLowerCase().includes('cash') && (
-                      <TouchableOpacity
-                        onPress={() => {
-                          setInitialCashAdminInput(initialCashInHand > 0 ? String(initialCashInHand) : (acc.balance > 0 ? String(acc.balance) : ''));
-                          setIsInitialCashAdminModalOpen(true);
-                        }}
-                        style={{
-                          paddingHorizontal: 6,
-                          paddingVertical: 2,
-                          borderRadius: 6,
-                          backgroundColor: colors.primaryGreenLight || '#eaf4eb',
-                          marginTop: 2,
-                          alignSelf: 'flex-start',
-                        }}
-                      >
-                        <Text style={{ fontSize: 10, fontWeight: '700', color: colors.primaryGreen }}>
-                          💵 Initial: {currencySymbol} {initialCashInHand.toLocaleString()}
-                        </Text>
+                <View style={[styles.tableRow, styles.tableHeaderRow, { backgroundColor: colors.bgSecondary }]}>
+                  <Text style={[styles.colHeader, { flex: 1, color: colors.textMuted }]}>EMOJI</Text>
+                  <Text style={[styles.colHeader, { flex: 2.5, color: colors.textMuted }]}>BILL / UTILITY</Text>
+                  <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted }]}>MONTHLY BUDGET</Text>
+                  <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted, textAlign: 'right' }]}>ACTIONS</Text>
+                </View>
+                {envelopes.map((env) => (
+                  <View key={env.id} style={[styles.tableRow, { borderBottomColor: colors.borderSoft }]}>
+                    <Text style={{ flex: 1, fontSize: 18 }}>{env.emoji || '⚡'}</Text>
+                    <Text style={[styles.themeName, { flex: 2.5, color: colors.textMain }]} numberOfLines={1}>{env.name}</Text>
+                    <Text style={{ flex: 2, fontSize: 12, fontWeight: '700', color: colors.primaryGreen }}>{currencySymbol} {env.budgeted.toLocaleString()}</Text>
+                    <View style={{ flex: 2, flexDirection: 'row', justifyContent: 'flex-end', gap: 6 }}>
+                      <TouchableOpacity onPress={() => handleOpenEditEnvelope(env)} style={[styles.actionIconButton, { backgroundColor: colors.bgSecondary }]}>
+                        <Ionicons name="pencil" size={14} color={colors.textMain} />
                       </TouchableOpacity>
-                    )}
+                      <TouchableOpacity
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        onPress={() =>
+                          handleConfirmDelete(
+                            'Delete Recurring Bill? ⚡',
+                            `Are you sure you want to delete recurring bill "${env.name}" (Budget: ${currencySymbol} ${env.budgeted.toLocaleString()})?`,
+                            () => deleteEnvelope(env.id)
+                          )
+                        }
+                        style={[styles.actionIconButton, { backgroundColor: colors.dangerLight || '#FFEBEB' }]}
+                      >
+                        <Ionicons name="trash-outline" size={15} color={colors.danger} />
+                      </TouchableOpacity>
+                    </View>
                   </View>
-                  <Text style={{ flex: 2, fontSize: 12, fontWeight: '700', color: acc.balance >= 0 ? colors.primaryGreen : colors.danger }}>
-                    {currencySymbol} {acc.balance.toLocaleString()}
-                  </Text>
-                  <View style={{ flex: 2, flexDirection: 'row', justifyContent: 'flex-end', gap: 6 }}>
-                    <TouchableOpacity onPress={() => handleOpenEditAccount(acc)} style={[styles.actionIconButton, { backgroundColor: colors.bgSecondary }]}>
-                      <Ionicons name="pencil" size={14} color={colors.textMain} />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      onPress={() =>
-                        handleConfirmDelete(
-                          'Delete Linked Account? 💳',
-                          `Are you sure you want to delete account "${acc.name}" (Balance: ${currencySymbol} ${acc.balance.toLocaleString()})?`,
-                          () => deleteAccount(acc.id)
-                        )
-                      }
-                      style={[styles.actionIconButton, { backgroundColor: colors.dangerLight || '#FFEBEB' }]}
-                    >
-                      <Ionicons name="trash-outline" size={15} color={colors.danger} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ))}
-            </View>
-          )}
+                ))}
+              </View>
+            )}
 
-          {/* ----------------- TABLE 4: EXPENSES ----------------- */}
-          {activeTableTab === 'expenses' && (
-            <View>
-              <View style={styles.tableHeaderRowAction}>
-                <Text style={[styles.tableSubHeader, { color: colors.textMuted }]}>
-                  Expenses ({filteredExpenses.length}{selectedMonth !== 'ALL' ? ` • ${selectedMonth}` : ' Total'})
-                </Text>
-                <TouchableOpacity onPress={handleOpenAddExpense} style={[styles.addCatBtn, { backgroundColor: colors.primaryAccent }]}>
-                  <Ionicons name="add-circle" size={14} color={colors.textOnAccent} />
-                  <Text style={[styles.addCatBtnText, { color: colors.textOnAccent }]}>Add Expense</Text>
-                </TouchableOpacity>
-              </View>
-              <View style={[styles.tableRow, styles.tableHeaderRow, { backgroundColor: colors.bgSecondary }]}>
-                <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted }]}>DATE</Text>
-                <Text style={[styles.colHeader, { flex: 3, color: colors.textMuted }]}>REASON/CATEGORY</Text>
-                <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted }]}>AMOUNT</Text>
-                <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted, textAlign: 'right' }]}>ACTIONS</Text>
-              </View>
-              {filteredExpenses.length === 0 ? (
-                <View style={{ paddingVertical: 20, alignItems: 'center' }}>
-                  <Text style={{ color: colors.textMuted, fontSize: 13 }}>
-                    No expenses found for {selectedMonth === 'ALL' ? 'any date' : selectedMonth}.
-                  </Text>
+            {/* ----------------- TABLE 3: ACCOUNTS ----------------- */}
+            {activeTableTab === 'accounts' && (
+              <View>
+                <View style={styles.tableHeaderRowAction}>
+                  <Text style={[styles.tableSubHeader, { color: colors.textMuted }]}>Accounts ({accounts.length})</Text>
+                  <TouchableOpacity onPress={handleOpenAddAccount} style={[styles.addCatBtn, { backgroundColor: colors.primaryAccent }]}>
+                    <Ionicons name="add-circle" size={14} color={colors.textOnAccent} />
+                    <Text style={[styles.addCatBtnText, { color: colors.textOnAccent }]}>Add Account</Text>
+                  </TouchableOpacity>
                 </View>
-              ) : (
-                filteredExpenses.map((exp) => {
-                  const linkedBill = exp.recurringBillId ? envelopes.find((b) => b.id === exp.recurringBillId) : null;
-                  const catObj = categories.find((c) => c.name.toLowerCase() === exp.category.toLowerCase());
-                  const catEmoji = catObj?.emoji || '🏷️';
-                  return (
-                    <View key={exp.id} style={[styles.tableRow, { borderBottomColor: colors.borderSoft }]}>
-                      <Text style={{ flex: 2, fontSize: 11, color: colors.textMuted }}>{exp.date}</Text>
-                      <View style={{ flex: 3 }}>
-                        <Text style={[styles.themeName, { color: colors.textMain }]} numberOfLines={1}>{exp.reason}</Text>
-                        <Text style={{ fontSize: 10, color: colors.textMuted }} numberOfLines={1}>
-                          {catEmoji} {exp.category} {linkedBill ? `• ⚡ ${linkedBill.name}` : ''}
-                        </Text>
+                <View style={[styles.tableRow, styles.tableHeaderRow, { backgroundColor: colors.bgSecondary }]}>
+                  <Text style={[styles.colHeader, { flex: 1, color: colors.textMuted }]}>EMOJI</Text>
+                  <Text style={[styles.colHeader, { flex: 2.5, color: colors.textMuted }]}>NAME</Text>
+                  <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted }]}>BALANCE</Text>
+                  <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted, textAlign: 'right' }]}>ACTIONS</Text>
+                </View>
+                {accounts.map((acc) => (
+                  <View key={acc.id} style={[styles.tableRow, { borderBottomColor: colors.borderSoft }]}>
+                    <Text style={{ flex: 1, fontSize: 18 }}>{acc.emoji || '💳'}</Text>
+                    <View style={{ flex: 2.5 }}>
+                      <Text style={[styles.themeName, { color: colors.textMain }]} numberOfLines={1}>{acc.name}</Text>
+                      {acc.name.toLowerCase().includes('cash') && (
+                        hasSetInitialCash ? null : (
+                          <TouchableOpacity
+                            onPress={() => {
+                              setInitialCashAdminInput('');
+                              setIsInitialCashAdminModalOpen(true);
+                            }}
+                            style={{
+                              paddingHorizontal: 6,
+                              paddingVertical: 2,
+                              borderRadius: 6,
+                              backgroundColor: colors.primaryGreenLight || '#eaf4eb',
+                              marginTop: 2,
+                              alignSelf: 'flex-start',
+                            }}
+                          >
+                            <Text style={{ fontSize: 10, fontWeight: '700', color: colors.primaryGreen }}>
+                              ＋ Initial: {currencySymbol} {initialCashInHand.toLocaleString()}
+                            </Text>
+                          </TouchableOpacity>
+                        )
+                      )}
+                    </View>
+                    <Text style={{ flex: 2, fontSize: 12, fontWeight: '700', color: acc.balance >= 0 ? colors.primaryGreen : colors.danger }}>
+                      {currencySymbol} {acc.balance.toLocaleString()}
+                    </Text>
+                    <View style={{ flex: 2, flexDirection: 'row', justifyContent: 'flex-end', gap: 6 }}>
+                      <TouchableOpacity onPress={() => handleOpenEditAccount(acc)} style={[styles.actionIconButton, { backgroundColor: colors.bgSecondary }]}>
+                        <Ionicons name="pencil" size={14} color={colors.textMain} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        onPress={() =>
+                          handleConfirmDelete(
+                            'Delete Linked Account? 💳',
+                            `Are you sure you want to delete account "${acc.name}" (Balance: ${currencySymbol} ${acc.balance.toLocaleString()})?`,
+                            () => deleteAccount(acc.id)
+                          )
+                        }
+                        style={[styles.actionIconButton, { backgroundColor: colors.dangerLight || '#FFEBEB' }]}
+                      >
+                        <Ionicons name="trash-outline" size={15} color={colors.danger} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* ----------------- TABLE 4: EXPENSES ----------------- */}
+            {activeTableTab === 'expenses' && (
+              <View>
+                <View style={styles.tableHeaderRowAction}>
+                  <Text style={[styles.tableSubHeader, { color: colors.textMuted }]}>
+                    Expenses ({filteredExpenses.length}{selectedMonth !== 'ALL' ? ` • ${selectedMonth}` : ' Total'})
+                  </Text>
+                  <TouchableOpacity onPress={handleOpenAddExpense} style={[styles.addCatBtn, { backgroundColor: colors.primaryAccent }]}>
+                    <Ionicons name="add-circle" size={14} color={colors.textOnAccent} />
+                    <Text style={[styles.addCatBtnText, { color: colors.textOnAccent }]}>Add Expense</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={[styles.tableRow, styles.tableHeaderRow, { backgroundColor: colors.bgSecondary }]}>
+                  <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted }]}>DATE</Text>
+                  <Text style={[styles.colHeader, { flex: 3, color: colors.textMuted }]}>REASON/CATEGORY</Text>
+                  <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted }]}>AMOUNT</Text>
+                  <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted, textAlign: 'right' }]}>ACTIONS</Text>
+                </View>
+                {filteredExpenses.length === 0 ? (
+                  <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+                    <Text style={{ color: colors.textMuted, fontSize: 13 }}>
+                      No expenses found for {selectedMonth === 'ALL' ? 'any date' : selectedMonth}.
+                    </Text>
+                  </View>
+                ) : (
+                  filteredExpenses.map((exp) => {
+                    const linkedBill = exp.recurringBillId ? envelopes.find((b) => b.id === exp.recurringBillId) : null;
+                    const catObj = categories.find((c) => c.name.toLowerCase() === exp.category.toLowerCase());
+                    const catEmoji = catObj?.emoji || '🏷️';
+                    return (
+                      <View key={exp.id} style={[styles.tableRow, { borderBottomColor: colors.borderSoft }]}>
+                        <Text style={{ flex: 2, fontSize: 11, color: colors.textMuted }}>{exp.date}</Text>
+                        <View style={{ flex: 3 }}>
+                          <Text style={[styles.themeName, { color: colors.textMain }]} numberOfLines={1}>{exp.reason}</Text>
+                          <Text style={{ fontSize: 10, color: colors.textMuted }} numberOfLines={1}>
+                            {catEmoji} {exp.category} {linkedBill ? `• ⚡ ${linkedBill.name}` : ''}
+                          </Text>
+                        </View>
+                        <Text style={{ flex: 2, fontSize: 12, fontWeight: '700', color: colors.danger }}>-{currencySymbol} {exp.amount.toLocaleString()}</Text>
+                        <View style={{ flex: 2, flexDirection: 'row', justifyContent: 'flex-end', gap: 6 }}>
+                          <TouchableOpacity onPress={() => handleOpenEditExpense(exp)} style={[styles.actionIconButton, { backgroundColor: colors.bgSecondary }]}>
+                            <Ionicons name="pencil" size={14} color={colors.textMain} />
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            onPress={() =>
+                              handleConfirmDelete(
+                                'Delete Expense Record? 💸',
+                                `Are you sure you want to delete expense "${exp.reason}" (-${currencySymbol} ${exp.amount.toLocaleString()})?`,
+                                () => deleteExpense(exp.id)
+                              )
+                            }
+                            style={[styles.actionIconButton, { backgroundColor: colors.dangerLight || '#FFEBEB' }]}
+                          >
+                            <Ionicons name="trash-outline" size={15} color={colors.danger} />
+                          </TouchableOpacity>
+                        </View>
                       </View>
-                      <Text style={{ flex: 2, fontSize: 12, fontWeight: '700', color: colors.danger }}>-{currencySymbol} {exp.amount.toLocaleString()}</Text>
+                    );
+                  })
+                )}
+              </View>
+            )}
+
+            {/* ----------------- TABLE 5: INCOMES ----------------- */}
+            {activeTableTab === 'incomes' && (
+              <View>
+                <View style={styles.tableHeaderRowAction}>
+                  <Text style={[styles.tableSubHeader, { color: colors.textMuted }]}>
+                    Incomes ({filteredIncomes.length}{selectedMonth !== 'ALL' ? ` • ${selectedMonth}` : ' Total'})
+                  </Text>
+                  <TouchableOpacity onPress={handleOpenAddIncome} style={[styles.addCatBtn, { backgroundColor: colors.primaryAccent }]}>
+                    <Ionicons name="add-circle" size={14} color={colors.textOnAccent} />
+                    <Text style={[styles.addCatBtnText, { color: colors.textOnAccent }]}>Add Income</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={[styles.tableRow, styles.tableHeaderRow, { backgroundColor: colors.bgSecondary }]}>
+                  <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted }]}>DATE</Text>
+                  <Text style={[styles.colHeader, { flex: 3, color: colors.textMuted }]}>NOTE / STORED</Text>
+                  <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted }]}>AMOUNT</Text>
+                  <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted, textAlign: 'right' }]}>ACTIONS</Text>
+                </View>
+                {filteredIncomes.length === 0 ? (
+                  <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+                    <Text style={{ color: colors.textMuted, fontSize: 13 }}>
+                      No incomes found for {selectedMonth === 'ALL' ? 'any date' : selectedMonth}.
+                    </Text>
+                  </View>
+                ) : (
+                  filteredIncomes.map((inc) => (
+                    <View key={inc.id} style={[styles.tableRow, { borderBottomColor: colors.borderSoft }]}>
+                      <Text style={{ flex: 2, fontSize: 11, color: colors.textMuted }}>{inc.date}</Text>
+                      <View style={{ flex: 3 }}>
+                        <Text style={[styles.themeName, { color: colors.textMain }]} numberOfLines={1}>{inc.note}</Text>
+                        <Text style={{ fontSize: 10, color: colors.textMuted }}>{inc.stored}</Text>
+                      </View>
+                      <Text style={{ flex: 2, fontSize: 12, fontWeight: '700', color: colors.primaryGreen }}>+{currencySymbol} {inc.amount.toLocaleString()}</Text>
                       <View style={{ flex: 2, flexDirection: 'row', justifyContent: 'flex-end', gap: 6 }}>
-                        <TouchableOpacity onPress={() => handleOpenEditExpense(exp)} style={[styles.actionIconButton, { backgroundColor: colors.bgSecondary }]}>
+                        <TouchableOpacity onPress={() => handleOpenEditIncome(inc)} style={[styles.actionIconButton, { backgroundColor: colors.bgSecondary }]}>
                           <Ionicons name="pencil" size={14} color={colors.textMain} />
                         </TouchableOpacity>
                         <TouchableOpacity
                           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                           onPress={() =>
                             handleConfirmDelete(
-                              'Delete Expense Record? 💸',
-                              `Are you sure you want to delete expense "${exp.reason}" (-${currencySymbol} ${exp.amount.toLocaleString()})?`,
-                              () => deleteExpense(exp.id)
+                              'Delete Income Record? 💰',
+                              `Are you sure you want to delete income "${inc.note}" (+${currencySymbol} ${inc.amount.toLocaleString()})?`,
+                              () => deleteIncome(inc.id)
                             )
                           }
                           style={[styles.actionIconButton, { backgroundColor: colors.dangerLight || '#FFEBEB' }]}
@@ -1881,753 +2075,748 @@ export const AdminDashboardView: React.FC = () => {
                         </TouchableOpacity>
                       </View>
                     </View>
-                  );
-                })
-              )}
-            </View>
-          )}
-
-          {/* ----------------- TABLE 5: INCOMES ----------------- */}
-          {activeTableTab === 'incomes' && (
-            <View>
-              <View style={styles.tableHeaderRowAction}>
-                <Text style={[styles.tableSubHeader, { color: colors.textMuted }]}>
-                  Incomes ({filteredIncomes.length}{selectedMonth !== 'ALL' ? ` • ${selectedMonth}` : ' Total'})
-                </Text>
-                <TouchableOpacity onPress={handleOpenAddIncome} style={[styles.addCatBtn, { backgroundColor: colors.primaryAccent }]}>
-                  <Ionicons name="add-circle" size={14} color={colors.textOnAccent} />
-                  <Text style={[styles.addCatBtnText, { color: colors.textOnAccent }]}>Add Income</Text>
-                </TouchableOpacity>
+                  ))
+                )}
               </View>
-              <View style={[styles.tableRow, styles.tableHeaderRow, { backgroundColor: colors.bgSecondary }]}>
-                <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted }]}>DATE</Text>
-                <Text style={[styles.colHeader, { flex: 3, color: colors.textMuted }]}>NOTE / STORED</Text>
-                <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted }]}>AMOUNT</Text>
-                <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted, textAlign: 'right' }]}>ACTIONS</Text>
-              </View>
-              {filteredIncomes.length === 0 ? (
-                <View style={{ paddingVertical: 20, alignItems: 'center' }}>
-                  <Text style={{ color: colors.textMuted, fontSize: 13 }}>
-                    No incomes found for {selectedMonth === 'ALL' ? 'any date' : selectedMonth}.
-                  </Text>
-                </View>
-              ) : (
-                filteredIncomes.map((inc) => (
-                  <View key={inc.id} style={[styles.tableRow, { borderBottomColor: colors.borderSoft }]}>
-                    <Text style={{ flex: 2, fontSize: 11, color: colors.textMuted }}>{inc.date}</Text>
-                    <View style={{ flex: 3 }}>
-                      <Text style={[styles.themeName, { color: colors.textMain }]} numberOfLines={1}>{inc.note}</Text>
-                      <Text style={{ fontSize: 10, color: colors.textMuted }}>{inc.stored}</Text>
-                    </View>
-                    <Text style={{ flex: 2, fontSize: 12, fontWeight: '700', color: colors.primaryGreen }}>+{currencySymbol} {inc.amount.toLocaleString()}</Text>
-                    <View style={{ flex: 2, flexDirection: 'row', justifyContent: 'flex-end', gap: 6 }}>
-                      <TouchableOpacity onPress={() => handleOpenEditIncome(inc)} style={[styles.actionIconButton, { backgroundColor: colors.bgSecondary }]}>
-                        <Ionicons name="pencil" size={14} color={colors.textMain} />
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        onPress={() =>
-                          handleConfirmDelete(
-                            'Delete Income Record? 💰',
-                            `Are you sure you want to delete income "${inc.note}" (+${currencySymbol} ${inc.amount.toLocaleString()})?`,
-                            () => deleteIncome(inc.id)
-                          )
-                        }
-                        style={[styles.actionIconButton, { backgroundColor: colors.dangerLight || '#FFEBEB' }]}
-                      >
-                        <Ionicons name="trash-outline" size={15} color={colors.danger} />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                ))
-              )}
-            </View>
-          )}
+            )}
 
-          {/* ----------------- TABLE 6: DEBTS ----------------- */}
-          {activeTableTab === 'debts' && (
-            <View>
-              <View style={styles.tableHeaderRowAction}>
-                <Text style={[styles.tableSubHeader, { color: colors.textMuted }]}>Debts ({debts.length})</Text>
-                <TouchableOpacity onPress={handleOpenAddDebt} style={[styles.addCatBtn, { backgroundColor: colors.primaryAccent }]}>
-                  <Ionicons name="add-circle" size={14} color={colors.textOnAccent} />
-                  <Text style={[styles.addCatBtnText, { color: colors.textOnAccent }]}>Add Debt</Text>
-                </TouchableOpacity>
-              </View>
-              <View style={[styles.tableRow, styles.tableHeaderRow, { backgroundColor: colors.bgSecondary }]}>
-                <Text style={[styles.colHeader, { flex: 3, color: colors.textMuted }]}>PERSON</Text>
-                <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted }]}>TOTAL</Text>
-                <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted }]}>REMAINING</Text>
-                <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted, textAlign: 'right' }]}>ACTIONS</Text>
-              </View>
-              {debts.map((d) => (
-                <View key={d.id} style={[styles.tableRow, { borderBottomColor: colors.borderSoft }]}>
-                  <View style={{ flex: 3 }}>
-                    <Text style={[styles.themeName, { color: colors.textMain }]} numberOfLines={1}>{d.emoji} {d.person}</Text>
-                    <Text style={{ fontSize: 10, color: colors.textMuted }} numberOfLines={1}>
-                      {d.type} • {d.status}{d.account ? ` • ${d.account}` : ''}{d.reason ? ` • "${d.reason}"` : ''}
-                    </Text>
-                  </View>
-                  <Text style={{ flex: 2, fontSize: 11, fontWeight: '600', color: colors.textMain }}>{currencySymbol} {d.total.toLocaleString()}</Text>
-                  <Text style={{ flex: 2, fontSize: 11, fontWeight: '700', color: d.remaining === 0 ? colors.primaryGreen : colors.danger }}>{currencySymbol} {d.remaining.toLocaleString()}</Text>
-                  <View style={{ flex: 2, flexDirection: 'row', justifyContent: 'flex-end', gap: 6 }}>
-                    <TouchableOpacity onPress={() => handleOpenEditDebt(d)} style={[styles.actionIconButton, { backgroundColor: colors.bgSecondary }]}>
-                      <Ionicons name="pencil" size={14} color={colors.textMain} />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      onPress={() =>
-                        handleConfirmDelete(
-                          'Delete Debt Record? 🤝',
-                          `Are you sure you want to delete debt record for "${d.person}" (${currencySymbol} ${d.total.toLocaleString()})?`,
-                          () => deleteDebt(d.id)
-                        )
-                      }
-                      style={[styles.actionIconButton, { backgroundColor: colors.dangerLight || '#FFEBEB' }]}
-                    >
-                      <Ionicons name="trash-outline" size={15} color={colors.danger} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ))}
-            </View>
-          )}
-
-          {/* ----------------- TABLE 7: WISHLIST ----------------- */}
-          {activeTableTab === 'wishlist' && (
-            <View>
-              <View style={styles.tableHeaderRowAction}>
-                <Text style={[styles.tableSubHeader, { color: colors.textMuted }]}>Wishlist ({wishlist.length})</Text>
-                <TouchableOpacity onPress={handleOpenAddWishlist} style={[styles.addCatBtn, { backgroundColor: colors.primaryAccent }]}>
-                  <Ionicons name="add-circle" size={14} color={colors.textOnAccent} />
-                  <Text style={[styles.addCatBtnText, { color: colors.textOnAccent }]}>Add Wish Item</Text>
-                </TouchableOpacity>
-              </View>
-              <View style={[styles.tableRow, styles.tableHeaderRow, { backgroundColor: colors.bgSecondary }]}>
-                <Text style={[styles.colHeader, { flex: 3, color: colors.textMuted }]}>ITEM</Text>
-                <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted }]}>PRICE</Text>
-                <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted }]}>PRIORITY</Text>
-                <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted, textAlign: 'right' }]}>ACTIONS</Text>
-              </View>
-              {wishlist.map((w) => (
-                <View key={w.id} style={[styles.tableRow, { borderBottomColor: colors.borderSoft }]}>
-                  <Text style={[styles.themeName, { flex: 3, color: colors.textMain }]} numberOfLines={1}>{w.emoji} {w.name}</Text>
-                  <Text style={{ flex: 2, fontSize: 11, fontWeight: '700', color: colors.primaryAccent }}>{currencySymbol} {w.price.toLocaleString()}</Text>
-                  <Text style={{ flex: 2, fontSize: 10, color: colors.textMuted }}>{w.priority}</Text>
-                  <View style={{ flex: 2, flexDirection: 'row', justifyContent: 'flex-end', gap: 6 }}>
-                    <TouchableOpacity onPress={() => handleOpenEditWishlist(w)} style={[styles.actionIconButton, { backgroundColor: colors.bgSecondary }]}>
-                      <Ionicons name="pencil" size={14} color={colors.textMain} />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      onPress={() =>
-                        handleConfirmDelete(
-                          'Delete Wishlist Item? 🎁',
-                          `Are you sure you want to delete wishlist item "${w.name}" (${currencySymbol} ${w.price.toLocaleString()})?`,
-                          () => deleteWishlistItem(w.id)
-                        )
-                      }
-                      style={[styles.actionIconButton, { backgroundColor: colors.dangerLight || '#FFEBEB' }]}
-                    >
-                      <Ionicons name="trash-outline" size={15} color={colors.danger} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ))}
-            </View>
-          )}
-
-          {/* ----------------- TABLE 8: TRANSFERS ----------------- */}
-          {activeTableTab === 'transfers' && (
-            <View>
-              <View style={styles.tableHeaderRowAction}>
-                <Text style={[styles.tableSubHeader, { color: colors.textMuted }]}>Internal Transfers ({transfers.length})</Text>
-                <TouchableOpacity onPress={handleOpenAddTransfer} style={[styles.addCatBtn, { backgroundColor: colors.primaryAccent }]}>
-                  <Ionicons name="add-circle" size={14} color={colors.textOnAccent} />
-                  <Text style={[styles.addCatBtnText, { color: colors.textOnAccent }]}>Add Transfer</Text>
-                </TouchableOpacity>
-              </View>
-              <View style={[styles.tableRow, styles.tableHeaderRow, { backgroundColor: colors.bgSecondary }]}>
-                <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted }]}>DATE</Text>
-                <Text style={[styles.colHeader, { flex: 3, color: colors.textMuted }]}>FROM ➔ TO</Text>
-                <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted }]}>AMOUNT</Text>
-                <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted, textAlign: 'right' }]}>ACTIONS</Text>
-              </View>
-              {transfers.map((tr) => (
-                <View key={tr.id} style={[styles.tableRow, { borderBottomColor: colors.borderSoft }]}>
-                  <Text style={{ flex: 2, fontSize: 10, color: colors.textMuted }}>{tr.date}</Text>
-                  <Text style={[styles.themeName, { flex: 3, color: colors.textMain }]} numberOfLines={1}>{tr.from} ➔ {tr.to}</Text>
-                  <Text style={{ flex: 2, fontSize: 11, fontWeight: '700', color: colors.primaryAccent }}>{currencySymbol} {tr.amount.toLocaleString()}</Text>
-                  <View style={{ flex: 2, flexDirection: 'row', justifyContent: 'flex-end', gap: 6 }}>
-                    <TouchableOpacity onPress={() => handleOpenEditTransfer(tr)} style={[styles.actionIconButton, { backgroundColor: colors.bgSecondary }]}>
-                      <Ionicons name="pencil" size={14} color={colors.textMain} />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      onPress={() =>
-                        handleConfirmDelete(
-                          'Delete Transfer Record? 🔄',
-                          `Are you sure you want to delete transfer "${tr.from} ➔ ${tr.to}" (${currencySymbol} ${tr.amount.toLocaleString()})?`,
-                          () => deleteTransfer(tr.id)
-                        )
-                      }
-                      style={[styles.actionIconButton, { backgroundColor: colors.dangerLight || '#FFEBEB' }]}
-                    >
-                      <Ionicons name="trash-outline" size={15} color={colors.danger} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ))}
-            </View>
-          )}
-
-          {/* ----------------- TABLE 9: TRANSACTIONS ----------------- */}
-          {activeTableTab === 'transactions' && (
-            <View>
-              <View style={styles.tableHeaderRowAction}>
-                <Text style={[styles.tableSubHeader, { color: colors.textMuted }]}>
-                  Transaction Master Log ({filteredTransactions.length}{selectedMonth !== 'ALL' ? ` • ${selectedMonth}` : ' Total'})
-                </Text>
-                <TouchableOpacity onPress={handleOpenAddTransaction} style={[styles.addCatBtn, { backgroundColor: colors.primaryAccent }]}>
-                  <Ionicons name="add-circle" size={14} color={colors.textOnAccent} />
-                  <Text style={[styles.addCatBtnText, { color: colors.textOnAccent }]}>Add Log</Text>
-                </TouchableOpacity>
-              </View>
-              <View style={[styles.tableRow, styles.tableHeaderRow, { backgroundColor: colors.bgSecondary }]}>
-                <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted }]}>DATE</Text>
-                <Text style={[styles.colHeader, { flex: 3, color: colors.textMuted }]}>REFERENCE / TYPE</Text>
-                <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted }]}>AMOUNT</Text>
-                <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted, textAlign: 'right' }]}>ACTIONS</Text>
-              </View>
-              {filteredTransactions.length === 0 ? (
-                <View style={{ paddingVertical: 20, alignItems: 'center' }}>
-                  <Text style={{ color: colors.textMuted, fontSize: 13 }}>
-                    No transactions found for {selectedMonth === 'ALL' ? 'any date' : selectedMonth}.
-                  </Text>
-                </View>
-              ) : (
-                filteredTransactions.map((tx) => (
-                  <View key={tx.id} style={[styles.tableRow, { borderBottomColor: colors.borderSoft }]}>
-                    <Text style={{ flex: 2, fontSize: 10, color: colors.textMuted }}>{tx.date}</Text>
-                    <View style={{ flex: 3 }}>
-                      <Text style={[styles.themeName, { color: colors.textMain }]} numberOfLines={1}>{tx.reference || tx.type}</Text>
-                      <Text style={{ fontSize: 10, color: colors.textMuted }}>{tx.type} • {tx.category}</Text>
-                    </View>
-                    <Text style={{ flex: 2, fontSize: 11, fontWeight: '700', color: colors.textMain }}>{currencySymbol} {tx.amount.toLocaleString()}</Text>
-                    <View style={{ flex: 2, flexDirection: 'row', justifyContent: 'flex-end', gap: 6 }}>
-                      <TouchableOpacity onPress={() => handleOpenEditTransaction(tx)} style={[styles.actionIconButton, { backgroundColor: colors.bgSecondary }]}>
-                        <Ionicons name="pencil" size={14} color={colors.textMain} />
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        onPress={() =>
-                          handleConfirmDelete(
-                            'Delete Transaction Log? 📜',
-                            `Are you sure you want to delete transaction "${tx.reference || tx.type}" (${currencySymbol} ${tx.amount.toLocaleString()})?`,
-                            () => deleteTransaction(tx.id)
-                          )
-                        }
-                        style={[styles.actionIconButton, { backgroundColor: colors.dangerLight || '#FFEBEB' }]}
-                      >
-                        <Ionicons name="trash-outline" size={15} color={colors.danger} />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                ))
-              )}
-            </View>
-          )}
-
-          {/* ----------------- TABLE 10: SALARIES ----------------- */}
-          {activeTableTab === 'salaries' && (
-            <View>
-              <View style={styles.tableHeaderRowAction}>
-                <Text style={[styles.tableSubHeader, { color: colors.textMuted }]}>Monthly Salaries ({salaries.length})</Text>
-                <TouchableOpacity onPress={handleOpenAddSalary} style={[styles.addCatBtn, { backgroundColor: colors.primaryAccent }]}>
-                  <Ionicons name="add-circle" size={14} color={colors.textOnAccent} />
-                  <Text style={[styles.addCatBtnText, { color: colors.textOnAccent }]}>Add Salary</Text>
-                </TouchableOpacity>
-              </View>
-              <View style={[styles.tableRow, styles.tableHeaderRow, { backgroundColor: colors.bgSecondary }]}>
-                <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted }]}>MONTH</Text>
-                <Text style={[styles.colHeader, { flex: 1.5, color: colors.textMuted }]}>DAY</Text>
-                <Text style={[styles.colHeader, { flex: 2.5, color: colors.textMuted }]}>AMOUNT</Text>
-                <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted, textAlign: 'right' }]}>ACTIONS</Text>
-              </View>
-              {[...salaries].sort((a, b) => b.month.localeCompare(a.month)).map((sal) => (
-                <View key={sal.id} style={[styles.tableRow, { borderBottomColor: colors.borderSoft }]}>
-                  <Text style={{ flex: 2, fontSize: 12, fontWeight: '700', color: colors.textMain }}>{sal.month}</Text>
-                  <Text style={{ flex: 1.5, fontSize: 11, color: colors.textMuted }}>Day {sal.day}</Text>
-                  <View style={{ flex: 2.5 }}>
-                    <Text style={{ fontSize: 12, fontWeight: '700', color: colors.primaryGreen }}>
-                      {currencySymbol} {sal.amount.toLocaleString()}
-                    </Text>
-                    <Text style={{ fontSize: 10, color: colors.textMuted }} numberOfLines={1}>
-                      {sal.accountName || accounts.find((a) => a.id === sal.accountId)?.name || 'Cash in Hand'}
-                    </Text>
-                  </View>
-                  <View style={{ flex: 2, flexDirection: 'row', justifyContent: 'flex-end', gap: 6 }}>
-                    <TouchableOpacity onPress={() => handleOpenEditSalary(sal)} style={[styles.actionIconButton, { backgroundColor: colors.bgSecondary }]}>
-                      <Ionicons name="pencil" size={14} color={colors.textMain} />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      onPress={() =>
-                        handleConfirmDelete(
-                          'Delete Salary Record? 💼',
-                          `Are you sure you want to delete salary for month "${sal.month}" (${currencySymbol} ${sal.amount.toLocaleString()})?`,
-                          () => deleteSalaryRecord(sal.id)
-                        )
-                      }
-                      style={[styles.actionIconButton, { backgroundColor: colors.dangerLight || '#FFEBEB' }]}
-                    >
-                      <Ionicons name="trash-outline" size={15} color={colors.danger} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ))}
-            </View>
-          )}
-        </View>
-
-        {/* 🗄️ Database & System Statistics Table */}
-        <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft }]}>
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: colors.textMain }]}>Saved Data Summary</Text>
-            <Text style={[styles.sectionSubtitle, { color: colors.textMuted }]}>
-              View the number of saved accounts, expenses, income records, and other app data.
-            </Text>
-          </View>
-
-          <View style={styles.statsGrid}>
-            <View style={[styles.statBox, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
-              <Text style={[styles.statNumber, { color: colors.primaryAccent }]}>{expenses.length}</Text>
-              <Text style={[styles.statLabel, { color: colors.textMuted }]}>Expenses Records</Text>
-            </View>
-
-            <View style={[styles.statBox, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
-              <Text style={[styles.statNumber, { color: colors.primaryAccent }]}>{incomes.length}</Text>
-              <Text style={[styles.statLabel, { color: colors.textMuted }]}>Incomes Records</Text>
-            </View>
-
-            <View style={[styles.statBox, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
-              <Text style={[styles.statNumber, { color: colors.primaryAccent }]}>{accounts.length}</Text>
-              <Text style={[styles.statLabel, { color: colors.textMuted }]}>Linked Accounts</Text>
-            </View>
-
-            <View style={[styles.statBox, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
-              <Text style={[styles.statNumber, { color: colors.primaryAccent }]}>{debts.length}</Text>
-              <Text style={[styles.statLabel, { color: colors.textMuted }]}>Debt Items</Text>
-            </View>
-
-            <View style={[styles.statBox, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
-              <Text style={[styles.statNumber, { color: colors.primaryAccent }]}>{salaries.length}</Text>
-              <Text style={[styles.statLabel, { color: colors.textMuted }]}>Salary History</Text>
-            </View>
-
-            <View style={[styles.statBox, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
-              <Text style={[styles.statNumber, { color: colors.primaryGreen }]}>{currencySymbol} {initialCashInHand.toLocaleString()}</Text>
-              <Text style={[styles.statLabel, { color: colors.textMuted }]}>Cash in Hand Initial</Text>
-            </View>
-          </View>
-
-          {/* 📦 JSON Backup & Restore for Mobile Device Transfer */}
-          <View style={{ marginTop: 14 }}>
-            <Text style={[styles.sectionSubtitle, { color: colors.textMuted, marginBottom: 8 }]}>
-              Transfer previous data to a new mobile or save a JSON backup:
-            </Text>
-            <View style={{ flexDirection: 'row', gap: 10 }}>
-              <TouchableOpacity
-                activeOpacity={0.8}
-                onPress={handleExportBackup}
-                style={[
-                  styles.inspectDbBtn,
-                  {
-                    flex: 1,
-                    backgroundColor: colors.primaryGreenLight || '#eaf4eb',
-                    borderColor: colors.primaryGreen,
-                  },
-                ]}
-              >
-                <Ionicons name="cloud-upload" size={16} color={colors.primaryGreen} />
-                <Text style={[styles.inspectDbBtnText, { color: colors.primaryGreen }]}>Export JSON</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                activeOpacity={0.8}
-                onPress={() => setIsImportModalOpen(true)}
-                style={[
-                  styles.inspectDbBtn,
-                  {
-                    flex: 1,
-                    backgroundColor: colors.primaryAccentLight || '#fff4e6',
-                    borderColor: colors.primaryAccent,
-                  },
-                ]}
-              >
-                <Ionicons name="cloud-download" size={16} color={colors.activeTabTint || colors.textMain} />
-                <Text style={[styles.inspectDbBtnText, { color: colors.activeTabTint || colors.textMain }]}>Import JSON </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Wipe Database Action */}
-          <View style={{ marginTop: 10 }}>
-            <TouchableOpacity
-              onPress={handleWipeAllData}
-              style={[styles.inspectDbBtn, { width: '100%', backgroundColor: colors.dangerLight || '#FFEBEB', borderColor: colors.danger }]}
-            >
-              <Ionicons name="trash" size={16} color={colors.danger} />
-              <Text style={[styles.inspectDbBtnText, { color: colors.danger }]}>Wipe All Records (Factory Reset)</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Add / Edit Category Modal (Admin Only) */}
-        <AestheticModal
-          visible={isCategoryModalOpen}
-          onClose={() => setIsCategoryModalOpen(false)}
-          title={editingCatId ? 'Edit Category Tag' : 'Create Category Tag'}
-        >
-          <View style={styles.formGroup}>
-            <Text style={[styles.inputLabel, { color: colors.textMain }]}>Category Name</Text>
-            <TextInput
-              style={[styles.input, { backgroundColor: colors.bgSecondary, color: colors.textMain, borderColor: colors.borderSoft }]}
-              placeholder="e.g. Travel, Gym, Gaming"
-              placeholderTextColor={colors.textMuted}
-              value={catName}
-              onChangeText={setCatName}
-            />
-          </View>
-
-          <View style={styles.formGroup}>
-            <Text style={[styles.inputLabel, { color: colors.textMain }]}>Icon / Emoji</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
-              {emojiList.map((em) => {
-                const isSelected = catEmoji === em;
-                return (
-                  <TouchableOpacity
-                    key={em}
-                    onPress={() => setCatEmoji(em)}
-                    style={[
-                      styles.choiceChip,
-                      { backgroundColor: isSelected ? colors.primaryAccent : colors.bgSecondary },
-                    ]}
-                  >
-                    <Text style={{ fontSize: 18 }}>{em}</Text>
+            {/* ----------------- TABLE 6: DEBTS ----------------- */}
+            {activeTableTab === 'debts' && (
+              <View>
+                <View style={styles.tableHeaderRowAction}>
+                  <Text style={[styles.tableSubHeader, { color: colors.textMuted }]}>Debts ({debts.length})</Text>
+                  <TouchableOpacity onPress={handleOpenAddDebt} style={[styles.addCatBtn, { backgroundColor: colors.primaryAccent }]}>
+                    <Ionicons name="add-circle" size={14} color={colors.textOnAccent} />
+                    <Text style={[styles.addCatBtnText, { color: colors.textOnAccent }]}>Add Debt</Text>
                   </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
+                </View>
+                <View style={[styles.tableRow, styles.tableHeaderRow, { backgroundColor: colors.bgSecondary }]}>
+                  <Text style={[styles.colHeader, { flex: 3, color: colors.textMuted }]}>PERSON</Text>
+                  <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted }]}>TOTAL</Text>
+                  <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted }]}>REMAINING</Text>
+                  <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted, textAlign: 'right' }]}>ACTIONS</Text>
+                </View>
+                {debts.map((d) => (
+                  <View key={d.id} style={[styles.tableRow, { borderBottomColor: colors.borderSoft }]}>
+                    <View style={{ flex: 3 }}>
+                      <Text style={[styles.themeName, { color: colors.textMain }]} numberOfLines={1}>{d.emoji} {d.person}</Text>
+                      <Text style={{ fontSize: 10, color: colors.textMuted }} numberOfLines={1}>
+                        {d.type} • {d.status}{d.account ? ` • ${d.account}` : ''}{d.reason ? ` • "${d.reason}"` : ''}
+                      </Text>
+                    </View>
+                    <Text style={{ flex: 2, fontSize: 11, fontWeight: '600', color: colors.textMain }}>{currencySymbol} {d.total.toLocaleString()}</Text>
+                    <Text style={{ flex: 2, fontSize: 11, fontWeight: '700', color: d.remaining === 0 ? colors.primaryGreen : colors.danger }}>{currencySymbol} {d.remaining.toLocaleString()}</Text>
+                    <View style={{ flex: 2, flexDirection: 'row', justifyContent: 'flex-end', gap: 6 }}>
+                      <TouchableOpacity onPress={() => handleOpenEditDebt(d)} style={[styles.actionIconButton, { backgroundColor: colors.bgSecondary }]}>
+                        <Ionicons name="pencil" size={14} color={colors.textMain} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        onPress={() =>
+                          handleConfirmDelete(
+                            'Delete Debt Record? 🤝',
+                            `Are you sure you want to delete debt record for "${d.person}" (${currencySymbol} ${d.total.toLocaleString()})?`,
+                            () => deleteDebt(d.id)
+                          )
+                        }
+                        style={[styles.actionIconButton, { backgroundColor: colors.dangerLight || '#FFEBEB' }]}
+                      >
+                        <Ionicons name="trash-outline" size={15} color={colors.danger} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* ----------------- TABLE 7: WISHLIST ----------------- */}
+            {activeTableTab === 'wishlist' && (
+              <View>
+                <View style={styles.tableHeaderRowAction}>
+                  <Text style={[styles.tableSubHeader, { color: colors.textMuted }]}>Wishlist ({wishlist.length})</Text>
+                  <TouchableOpacity onPress={handleOpenAddWishlist} style={[styles.addCatBtn, { backgroundColor: colors.primaryAccent }]}>
+                    <Ionicons name="add-circle" size={14} color={colors.textOnAccent} />
+                    <Text style={[styles.addCatBtnText, { color: colors.textOnAccent }]}>Add Wish Item</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={[styles.tableRow, styles.tableHeaderRow, { backgroundColor: colors.bgSecondary }]}>
+                  <Text style={[styles.colHeader, { flex: 3, color: colors.textMuted }]}>ITEM</Text>
+                  <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted }]}>PRICE</Text>
+                  <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted }]}>PRIORITY</Text>
+                  <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted, textAlign: 'right' }]}>ACTIONS</Text>
+                </View>
+                {wishlist.map((w) => (
+                  <View key={w.id} style={[styles.tableRow, { borderBottomColor: colors.borderSoft }]}>
+                    <Text style={[styles.themeName, { flex: 3, color: colors.textMain }]} numberOfLines={1}>{w.emoji} {w.name}</Text>
+                    <Text style={{ flex: 2, fontSize: 11, fontWeight: '700', color: colors.primaryAccent }}>{currencySymbol} {w.price.toLocaleString()}</Text>
+                    <Text style={{ flex: 2, fontSize: 10, color: colors.textMuted }}>{w.priority}</Text>
+                    <View style={{ flex: 2, flexDirection: 'row', justifyContent: 'flex-end', gap: 6 }}>
+                      <TouchableOpacity onPress={() => handleOpenEditWishlist(w)} style={[styles.actionIconButton, { backgroundColor: colors.bgSecondary }]}>
+                        <Ionicons name="pencil" size={14} color={colors.textMain} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        onPress={() =>
+                          handleConfirmDelete(
+                            'Delete Wishlist Item? 🎁',
+                            `Are you sure you want to delete wishlist item "${w.name}" (${currencySymbol} ${w.price.toLocaleString()})?`,
+                            () => deleteWishlistItem(w.id)
+                          )
+                        }
+                        style={[styles.actionIconButton, { backgroundColor: colors.dangerLight || '#FFEBEB' }]}
+                      >
+                        <Ionicons name="trash-outline" size={15} color={colors.danger} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* ----------------- TABLE 8: TRANSFERS ----------------- */}
+            {activeTableTab === 'transfers' && (
+              <View>
+                <View style={styles.tableHeaderRowAction}>
+                  <Text style={[styles.tableSubHeader, { color: colors.textMuted }]}>Internal Transfers ({transfers.length})</Text>
+                  <TouchableOpacity onPress={handleOpenAddTransfer} style={[styles.addCatBtn, { backgroundColor: colors.primaryAccent }]}>
+                    <Ionicons name="add-circle" size={14} color={colors.textOnAccent} />
+                    <Text style={[styles.addCatBtnText, { color: colors.textOnAccent }]}>Add Transfer</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={[styles.tableRow, styles.tableHeaderRow, { backgroundColor: colors.bgSecondary }]}>
+                  <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted }]}>DATE</Text>
+                  <Text style={[styles.colHeader, { flex: 3, color: colors.textMuted }]}>FROM ➔ TO</Text>
+                  <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted }]}>AMOUNT</Text>
+                  <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted, textAlign: 'right' }]}>ACTIONS</Text>
+                </View>
+                {transfers.map((tr) => (
+                  <View key={tr.id} style={[styles.tableRow, { borderBottomColor: colors.borderSoft }]}>
+                    <Text style={{ flex: 2, fontSize: 10, color: colors.textMuted }}>{tr.date}</Text>
+                    <Text style={[styles.themeName, { flex: 3, color: colors.textMain }]} numberOfLines={1}>{tr.from} ➔ {tr.to}</Text>
+                    <Text style={{ flex: 2, fontSize: 11, fontWeight: '700', color: colors.primaryAccent }}>{currencySymbol} {tr.amount.toLocaleString()}</Text>
+                    <View style={{ flex: 2, flexDirection: 'row', justifyContent: 'flex-end', gap: 6 }}>
+                      <TouchableOpacity onPress={() => handleOpenEditTransfer(tr)} style={[styles.actionIconButton, { backgroundColor: colors.bgSecondary }]}>
+                        <Ionicons name="pencil" size={14} color={colors.textMain} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        onPress={() =>
+                          handleConfirmDelete(
+                            'Delete Transfer Record? 🔄',
+                            `Are you sure you want to delete transfer "${tr.from} ➔ ${tr.to}" (${currencySymbol} ${tr.amount.toLocaleString()})?`,
+                            () => deleteTransfer(tr.id)
+                          )
+                        }
+                        style={[styles.actionIconButton, { backgroundColor: colors.dangerLight || '#FFEBEB' }]}
+                      >
+                        <Ionicons name="trash-outline" size={15} color={colors.danger} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* ----------------- TABLE 9: TRANSACTIONS ----------------- */}
+            {activeTableTab === 'transactions' && (
+              <View>
+                <View style={styles.tableHeaderRowAction}>
+                  <Text style={[styles.tableSubHeader, { color: colors.textMuted }]}>
+                    Transaction Master Log ({filteredTransactions.length}{selectedMonth !== 'ALL' ? ` • ${selectedMonth}` : ' Total'})
+                  </Text>
+                  <TouchableOpacity onPress={handleOpenAddTransaction} style={[styles.addCatBtn, { backgroundColor: colors.primaryAccent }]}>
+                    <Ionicons name="add-circle" size={14} color={colors.textOnAccent} />
+                    <Text style={[styles.addCatBtnText, { color: colors.textOnAccent }]}>Add Log</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={[styles.tableRow, styles.tableHeaderRow, { backgroundColor: colors.bgSecondary }]}>
+                  <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted }]}>DATE</Text>
+                  <Text style={[styles.colHeader, { flex: 3, color: colors.textMuted }]}>REFERENCE / TYPE</Text>
+                  <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted }]}>AMOUNT</Text>
+                  <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted, textAlign: 'right' }]}>ACTIONS</Text>
+                </View>
+                {filteredTransactions.length === 0 ? (
+                  <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+                    <Text style={{ color: colors.textMuted, fontSize: 13 }}>
+                      No transactions found for {selectedMonth === 'ALL' ? 'any date' : selectedMonth}.
+                    </Text>
+                  </View>
+                ) : (
+                  filteredTransactions.map((tx) => (
+                    <View key={tx.id} style={[styles.tableRow, { borderBottomColor: colors.borderSoft }]}>
+                      <Text style={{ flex: 2, fontSize: 10, color: colors.textMuted }}>{tx.date}</Text>
+                      <View style={{ flex: 3 }}>
+                        <Text style={[styles.themeName, { color: colors.textMain }]} numberOfLines={1}>{tx.reference || tx.type}</Text>
+                        <Text style={{ fontSize: 10, color: colors.textMuted }}>{tx.type} • {tx.category}</Text>
+                      </View>
+                      <Text style={{ flex: 2, fontSize: 11, fontWeight: '700', color: colors.textMain }}>{currencySymbol} {tx.amount.toLocaleString()}</Text>
+                      <View style={{ flex: 2, flexDirection: 'row', justifyContent: 'flex-end', gap: 6 }}>
+                        <TouchableOpacity onPress={() => handleOpenEditTransaction(tx)} style={[styles.actionIconButton, { backgroundColor: colors.bgSecondary }]}>
+                          <Ionicons name="pencil" size={14} color={colors.textMain} />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          onPress={() =>
+                            handleConfirmDelete(
+                              'Delete Transaction Log? 📜',
+                              `Are you sure you want to delete transaction "${tx.reference || tx.type}" (${currencySymbol} ${tx.amount.toLocaleString()})?`,
+                              () => deleteTransaction(tx.id)
+                            )
+                          }
+                          style={[styles.actionIconButton, { backgroundColor: colors.dangerLight || '#FFEBEB' }]}
+                        >
+                          <Ionicons name="trash-outline" size={15} color={colors.danger} />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ))
+                )}
+              </View>
+            )}
+
+            {/* ----------------- TABLE 10: SALARIES ----------------- */}
+            {activeTableTab === 'salaries' && (
+              <View>
+                <View style={styles.tableHeaderRowAction}>
+                  <Text style={[styles.tableSubHeader, { color: colors.textMuted }]}>Monthly Salaries ({salaries.length})</Text>
+                  <TouchableOpacity onPress={handleOpenAddSalary} style={[styles.addCatBtn, { backgroundColor: colors.primaryAccent }]}>
+                    <Ionicons name="add-circle" size={14} color={colors.textOnAccent} />
+                    <Text style={[styles.addCatBtnText, { color: colors.textOnAccent }]}>Add Salary</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={[styles.tableRow, styles.tableHeaderRow, { backgroundColor: colors.bgSecondary }]}>
+                  <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted }]}>MONTH</Text>
+                  <Text style={[styles.colHeader, { flex: 1.5, color: colors.textMuted }]}>DAY</Text>
+                  <Text style={[styles.colHeader, { flex: 2.5, color: colors.textMuted }]}>AMOUNT</Text>
+                  <Text style={[styles.colHeader, { flex: 2, color: colors.textMuted, textAlign: 'right' }]}>ACTIONS</Text>
+                </View>
+                {[...salaries].sort((a, b) => b.month.localeCompare(a.month)).map((sal) => (
+                  <View key={sal.id} style={[styles.tableRow, { borderBottomColor: colors.borderSoft }]}>
+                    <Text style={{ flex: 2, fontSize: 12, fontWeight: '700', color: colors.textMain }}>{sal.month}</Text>
+                    <Text style={{ flex: 1.5, fontSize: 11, color: colors.textMuted }}>Day {sal.day}</Text>
+                    <View style={{ flex: 2.5 }}>
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: colors.primaryGreen }}>
+                        {currencySymbol} {sal.amount.toLocaleString()}
+                      </Text>
+                      <Text style={{ fontSize: 10, color: colors.textMuted }} numberOfLines={1}>
+                        {sal.accountName || accounts.find((a) => a.id === sal.accountId)?.name || 'Cash in Hand'}
+                      </Text>
+                    </View>
+                    <View style={{ flex: 2, flexDirection: 'row', justifyContent: 'flex-end', gap: 6 }}>
+                      <TouchableOpacity onPress={() => handleOpenEditSalary(sal)} style={[styles.actionIconButton, { backgroundColor: colors.bgSecondary }]}>
+                        <Ionicons name="pencil" size={14} color={colors.textMain} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        onPress={() =>
+                          handleConfirmDelete(
+                            'Delete Salary Record? 💼',
+                            `Are you sure you want to delete salary for month "${sal.month}" (${currencySymbol} ${sal.amount.toLocaleString()})?`,
+                            () => deleteSalaryRecord(sal.id)
+                          )
+                        }
+                        style={[styles.actionIconButton, { backgroundColor: colors.dangerLight || '#FFEBEB' }]}
+                      >
+                        <Ionicons name="trash-outline" size={15} color={colors.danger} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
           </View>
 
-          <View style={styles.formGroup}>
-            <Text style={[styles.inputLabel, { color: colors.textMain }]}>Tag Color</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
-              {colorSwatches.map((c) => {
-                const isSelected = catColor === c;
-                return (
-                  <TouchableOpacity
-                    key={c}
-                    onPress={() => setCatColor(c)}
-                    style={[
-                      styles.colorCircle,
-                      { backgroundColor: c, borderColor: isSelected ? colors.textMain : 'transparent' },
-                    ]}
-                  />
-                );
-              })}
-            </ScrollView>
+          {/* 🗄️ Database & System Statistics Table */}
+          <View style={[styles.sectionCard, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft }]}>
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: colors.textMain }]}>Saved Data Summary</Text>
+              <Text style={[styles.sectionSubtitle, { color: colors.textMuted }]}>
+                View the number of saved accounts, expenses, income records, and other app data.
+              </Text>
+            </View>
+
+            <View style={styles.statsGrid}>
+              <View style={[styles.statBox, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
+                <Text style={[styles.statNumber, { color: colors.primaryAccent }]}>{expenses.length}</Text>
+                <Text style={[styles.statLabel, { color: colors.textMuted }]}>Expenses Records</Text>
+              </View>
+
+              <View style={[styles.statBox, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
+                <Text style={[styles.statNumber, { color: colors.primaryAccent }]}>{incomes.length}</Text>
+                <Text style={[styles.statLabel, { color: colors.textMuted }]}>Incomes Records</Text>
+              </View>
+
+              <View style={[styles.statBox, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
+                <Text style={[styles.statNumber, { color: colors.primaryAccent }]}>{accounts.length}</Text>
+                <Text style={[styles.statLabel, { color: colors.textMuted }]}>Linked Accounts</Text>
+              </View>
+
+              <View style={[styles.statBox, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
+                <Text style={[styles.statNumber, { color: colors.primaryAccent }]}>{debts.length}</Text>
+                <Text style={[styles.statLabel, { color: colors.textMuted }]}>Debt Items</Text>
+              </View>
+
+              <View style={[styles.statBox, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
+                <Text style={[styles.statNumber, { color: colors.primaryAccent }]}>{salaries.length}</Text>
+                <Text style={[styles.statLabel, { color: colors.textMuted }]}>Salary History</Text>
+              </View>
+
+              <View style={[styles.statBox, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
+                <Text style={[styles.statNumber, { color: colors.primaryGreen }]}>{currencySymbol} {initialCashInHand.toLocaleString()}</Text>
+                <Text style={[styles.statLabel, { color: colors.textMuted }]}>Cash in Hand Initial</Text>
+              </View>
+            </View>
+
+            {/* 📦 JSON Backup & Restore for Mobile Device Transfer */}
+            <View style={{ marginTop: 14 }}>
+              <Text style={[styles.sectionSubtitle, { color: colors.textMuted, marginBottom: 8 }]}>
+                Transfer previous data to a new mobile or save a JSON backup:
+              </Text>
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => openBackupModal('export')}
+                  style={[
+                    styles.inspectDbBtn,
+                    {
+                      flex: 1,
+                      backgroundColor: colors.primaryGreenLight || '#eaf4eb',
+                      borderColor: colors.primaryGreen,
+                    },
+                  ]}
+                >
+                  <Ionicons name="cloud-upload" size={16} color={colors.primaryGreen} />
+                  <Text style={[styles.inspectDbBtnText, { color: colors.primaryGreen }]}>Export JSON</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => openBackupModal('import')}
+                  style={[
+                    styles.inspectDbBtn,
+                    {
+                      flex: 1,
+                      backgroundColor: colors.primaryAccentLight || '#fff4e6',
+                      borderColor: colors.primaryAccent,
+                    },
+                  ]}
+                >
+                  <Ionicons name="cloud-download" size={16} color={colors.activeTabTint || colors.textMain} />
+                  <Text style={[styles.inspectDbBtnText, { color: colors.activeTabTint || colors.textMain }]}>Import JSON </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Wipe Database Action */}
+            <View style={{ marginTop: 10 }}>
+              <TouchableOpacity
+                onPress={handleWipeAllData}
+                style={[styles.inspectDbBtn, { width: '100%', backgroundColor: colors.dangerLight || '#FFEBEB', borderColor: colors.danger }]}
+              >
+                <Ionicons name="trash" size={16} color={colors.danger} />
+                <Text style={[styles.inspectDbBtnText, { color: colors.danger }]}>Wipe All Records (Factory Reset)</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
-          <TouchableOpacity
-            onPress={handleSaveCategory}
-            style={[styles.submitButton, { backgroundColor: colors.primaryAccent }]}
+          {/* Add / Edit Category Modal (Admin Only) */}
+          <AestheticModal
+            visible={isCategoryModalOpen}
+            onClose={() => setIsCategoryModalOpen(false)}
+            title={editingCatId ? 'Edit Category Tag' : 'Create Category Tag'}
           >
-            <Text style={[styles.submitButtonText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}>
-              {editingCatId ? 'Update Category ' : 'Create Category '}
-            </Text>
-          </TouchableOpacity>
-        </AestheticModal>
-
-        {/* Generic Table Record Edit Modal (Admin Only) */}
-        <AestheticModal
-          visible={genericEditModalOpen}
-          onClose={handleCloseGenericModal}
-          title={editTitle}
-        >
-          <View style={styles.formGroup}>
-            <Text style={[styles.inputLabel, { color: colors.textMain }]}>{editLabel1}</Text>
-            <TextInput
-              style={[styles.input, { backgroundColor: colors.bgSecondary, color: colors.textMain, borderColor: colors.borderSoft }]}
-              value={editField1}
-              onChangeText={setEditField1}
-            />
-          </View>
-
-          <View style={styles.formGroup}>
-            <Text style={[styles.inputLabel, { color: colors.textMain }]}>{editLabel2}</Text>
-            <TextInput
-              style={[styles.input, { backgroundColor: colors.bgSecondary, color: colors.textMain, borderColor: colors.borderSoft }]}
-              keyboardType="numeric"
-              value={editField2}
-              onChangeText={setEditField2}
-            />
-          </View>
-
-          <View style={styles.formGroup}>
-            <Text style={[styles.inputLabel, { color: colors.textMain }]}>{editLabel3}</Text>
-            <TextInput
-              style={[styles.input, { backgroundColor: colors.bgSecondary, color: colors.textMain, borderColor: colors.borderSoft }]}
-              value={editField3}
-              onChangeText={setEditField3}
-            />
-          </View>
-
-          {!!editLabel4 && (
             <View style={styles.formGroup}>
-              <Text style={[styles.inputLabel, { color: colors.textMain }]}>{editLabel4}</Text>
+              <Text style={[styles.inputLabel, { color: colors.textMain }]}>Category Name</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: colors.bgSecondary, color: colors.textMain, borderColor: colors.borderSoft }]}
+                placeholder="e.g. Travel, Gym, Gaming"
+                placeholderTextColor={colors.textMuted}
+                value={catName}
+                onChangeText={setCatName}
+              />
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={[styles.inputLabel, { color: colors.textMain }]}>Icon / Emoji</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
+                {emojiList.map((em) => {
+                  const isSelected = catEmoji === em;
+                  return (
+                    <TouchableOpacity
+                      key={em}
+                      onPress={() => setCatEmoji(em)}
+                      style={[
+                        styles.choiceChip,
+                        { backgroundColor: isSelected ? colors.primaryAccent : colors.bgSecondary },
+                      ]}
+                    >
+                      <Text style={{ fontSize: 18 }}>{em}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={[styles.inputLabel, { color: colors.textMain }]}>Tag Color</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
+                {colorSwatches.map((c) => {
+                  const isSelected = catColor === c;
+                  return (
+                    <TouchableOpacity
+                      key={c}
+                      onPress={() => setCatColor(c)}
+                      style={[
+                        styles.colorCircle,
+                        { backgroundColor: c, borderColor: isSelected ? colors.textMain : 'transparent' },
+                      ]}
+                    />
+                  );
+                })}
+              </ScrollView>
+            </View>
+
+            <TouchableOpacity
+              onPress={handleSaveCategory}
+              style={[styles.submitButton, { backgroundColor: colors.primaryAccent }]}
+            >
+              <Text style={[styles.submitButtonText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}>
+                {editingCatId ? 'Update Category ' : 'Create Category '}
+              </Text>
+            </TouchableOpacity>
+          </AestheticModal>
+
+          {/* Generic Table Record Edit Modal (Admin Only) */}
+          <AestheticModal
+            visible={genericEditModalOpen}
+            onClose={handleCloseGenericModal}
+            title={editTitle}
+          >
+            <View style={styles.formGroup}>
+              <Text style={[styles.inputLabel, { color: colors.textMain }]}>{editLabel1}</Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <TextInput
                   style={[styles.input, { flex: 1, backgroundColor: colors.bgSecondary, color: colors.textMain, borderColor: colors.borderSoft }]}
-                  value={editField4}
-                  onChangeText={setEditField4}
-                  placeholder="e.g. 15 Jul 2026 or 2026-07-15"
+                  value={editField1}
+                  onChangeText={setEditField1}
+                  placeholder={editLabel1.toLowerCase().includes('month') ? 'YYYY-MM (e.g. 2026-11)' : undefined}
                   placeholderTextColor={colors.textMuted}
                 />
-                <TouchableOpacity
-                  onPress={() => setIsAdminDatePickerOpen(true)}
-                  style={{ padding: 12, borderRadius: 14, backgroundColor: colors.bgSecondary, borderWidth: 0, borderColor: 'transparent' }}
-                >
-                  <Ionicons name="calendar-outline" size={20} color={colors.primaryAccent} />
-                </TouchableOpacity>
+                {editLabel1.toLowerCase().includes('month') && (
+                  <TouchableOpacity
+                    onPress={() => setIsAdminMonthPickerOpen(true)}
+                    style={{ padding: 12, borderRadius: 14, backgroundColor: colors.bgSecondary, borderWidth: 0 }}
+                  >
+                    <Ionicons name="calendar-outline" size={20} color={colors.primaryAccent} />
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
-          )}
 
-          <TouchableOpacity
-            onPress={handleSaveGenericEdit}
-            style={[styles.submitButton, { backgroundColor: colors.primaryAccent }]}
+            <View style={styles.formGroup}>
+              <Text style={[styles.inputLabel, { color: colors.textMain }]}>{editLabel2}</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: colors.bgSecondary, color: colors.textMain, borderColor: colors.borderSoft }]}
+                keyboardType="numeric"
+                value={editField2}
+                onChangeText={setEditField2}
+              />
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={[styles.inputLabel, { color: colors.textMain }]}>{editLabel3}</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: colors.bgSecondary, color: colors.textMain, borderColor: colors.borderSoft }]}
+                value={editField3}
+                onChangeText={setEditField3}
+              />
+            </View>
+
+            {!!editLabel4 && (
+              <View style={styles.formGroup}>
+                <Text style={[styles.inputLabel, { color: colors.textMain }]}>{editLabel4}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <TextInput
+                    style={[styles.input, { flex: 1, backgroundColor: colors.bgSecondary, color: colors.textMain, borderColor: colors.borderSoft }]}
+                    value={editField4}
+                    onChangeText={setEditField4}
+                    placeholder={editLabel4.toLowerCase().includes('date') ? 'e.g. 15 Jul 2026 or 2026-07-15' : 'e.g. Cash in Hand or Bank Account'}
+                    placeholderTextColor={colors.textMuted}
+                  />
+                  {editLabel4.toLowerCase().includes('date') && (
+                    <TouchableOpacity
+                      onPress={() => setIsAdminDatePickerOpen(true)}
+                      style={{ padding: 12, borderRadius: 14, backgroundColor: colors.bgSecondary, borderWidth: 0, borderColor: 'transparent' }}
+                    >
+                      <Ionicons name="calendar-outline" size={20} color={colors.primaryAccent} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            )}
+
+            <TouchableOpacity
+              onPress={handleSaveGenericEdit}
+              style={[styles.submitButton, { backgroundColor: colors.primaryAccent }]}
+            >
+              <Text style={[styles.submitButtonText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}>
+                Save Changes ✏️
+              </Text>
+            </TouchableOpacity>
+          </AestheticModal>
+
+          {/* Date Picker Selector Modal */}
+          <DatePickerFieldModal
+            visible={isAdminDatePickerOpen}
+            onClose={() => setIsAdminDatePickerOpen(false)}
+            onSelectDate={(formattedDate) => setEditField4(formattedDate)}
+          />
+
+          {/* Month Picker Selector Modal for Salary Month Record */}
+          <MonthDropdownModal
+            visible={isAdminMonthPickerOpen}
+            onClose={() => setIsAdminMonthPickerOpen(false)}
+            selectedMonth={editField1}
+            onSelectMonth={(monthKey) => {
+              if (monthKey && monthKey !== 'ALL') {
+                setEditField1(monthKey);
+              }
+              setIsAdminMonthPickerOpen(false);
+            }}
+          />
+
+          {/* JSON Backup Export Modal */}
+          <AestheticModal
+            visible={isExportSuccessModalOpen}
+            onClose={() => setIsExportSuccessModalOpen(false)}
+            title="Encrypted Backup Exported!"
           >
-            <Text style={[styles.submitButtonText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}>
-              Save Changes ✏️
-            </Text>
-          </TouchableOpacity>
-        </AestheticModal>
+            <View style={{ paddingVertical: 4 }}>
 
-        {/* Date Picker Selector Modal */}
-        <DatePickerFieldModal
-          visible={isAdminDatePickerOpen}
-          onClose={() => setIsAdminDatePickerOpen(false)}
-          onSelectDate={(formattedDate) => setEditField4(formattedDate)}
-        />
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={async () => {
+                  try {
+                    const now = new Date();
+                    const dateTag = `${now.getFullYear()}_${String(now.getMonth() + 1).padStart(2, '0')}_${String(now.getDate()).padStart(2, '0')}`;
+                    const fileName = `cashly_backup_${dateTag}.json`;
 
-        {/* JSON Backup Export Modal */}
-        <AestheticModal
-          visible={isExportSuccessModalOpen}
-          onClose={() => setIsExportSuccessModalOpen(false)}
-          title="Encrypted Backup Exported!"
-        >
-          <View style={{ paddingVertical: 4 }}>
-
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={async () => {
-                try {
-                  const now = new Date();
-                  const dateTag = `${now.getFullYear()}_${String(now.getMonth() + 1).padStart(2, '0')}_${String(now.getDate()).padStart(2, '0')}`;
-                  const fileName = `cashly_backup_${dateTag}.json`;
-
-                  if (Platform.OS === 'web') {
-                    const blob = new Blob([exportedJsonString], { type: 'application/json' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = fileName;
-                    a.click();
-                    URL.revokeObjectURL(url);
-                  } else {
-                    const fileUri = `${FileSystem.cacheDirectory}${fileName}`;
-                    await FileSystem.writeAsStringAsync(fileUri, exportedJsonString, { encoding: FileSystem.EncodingType.UTF8 });
-                    if (await Sharing.isAvailableAsync()) {
-                      await Sharing.shareAsync(fileUri, {
-                        mimeType: 'application/json',
-                        dialogTitle: 'Export Expense Tracker Backup (JSON)',
-                        UTI: 'public.json',
-                      });
+                    if (Platform.OS === 'web') {
+                      const blob = new Blob([exportedJsonString], { type: 'application/json' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = fileName;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    } else {
+                      const fileUri = `${FileSystem.cacheDirectory}${fileName}`;
+                      await FileSystem.writeAsStringAsync(fileUri, exportedJsonString, { encoding: FileSystem.EncodingType.UTF8 });
+                      if (await Sharing.isAvailableAsync()) {
+                        await Sharing.shareAsync(fileUri, {
+                          mimeType: 'application/json',
+                          dialogTitle: 'Export Expense Tracker Backup (JSON)',
+                          UTI: 'public.json',
+                        });
+                      }
                     }
+                  } catch (e: any) {
+                    Alert.alert('Share Failed', e?.message || 'Could not trigger share dialog.');
                   }
-                } catch (e: any) {
-                  Alert.alert('Share Failed', e?.message || 'Could not trigger share dialog.');
-                }
-              }}
-              style={[styles.submitButton, { backgroundColor: colors.primaryAccent, marginBottom: 10 }]}
-            >
-              <Text style={[styles.submitButtonText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}>Share / Save Backup File</Text>
-            </TouchableOpacity>
+                }}
+                style={[styles.submitButton, { backgroundColor: colors.primaryAccent, marginBottom: 10 }]}
+              >
+                <Text style={[styles.submitButtonText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}>Share / Save Backup File</Text>
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={() => setIsExportSuccessModalOpen(false)}
-              style={[styles.submitButton, { backgroundColor: colors.bgSecondary, borderColor: 'transparent', borderWidth: 0 }]}
-            >
-              <Text style={[styles.submitButtonText, { color: colors.textMain }]}>Done</Text>
-            </TouchableOpacity>
-          </View>
-        </AestheticModal>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => setIsExportSuccessModalOpen(false)}
+                style={[styles.submitButton, { backgroundColor: colors.bgSecondary, borderColor: 'transparent', borderWidth: 0 }]}
+              >
+                <Text style={[styles.submitButtonText, { color: colors.textMain }]}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </AestheticModal>
 
-        {/* JSON Backup Import Modal */}
-        <AestheticModal
-          visible={isImportModalOpen}
-          onClose={() => {
-            setIsImportModalOpen(false);
-            setImportStatusMessage(null);
-          }}
-          title="Import Backup(JSON)"
-          subtitle="Restore secure data when changing to a new phone"
-        // icon="📥"
-        >
-          <ScrollView style={{ maxHeight: 420 }} showsVerticalScrollIndicator={false}>
-            {/* <Text style={{ fontSize: 12, color: colors.textMuted, lineHeight: 17, marginBottom: 12 }}>
+          {/* JSON Backup Import Modal */}
+          <AestheticModal
+            visible={isImportModalOpen}
+            onClose={() => {
+              setIsImportModalOpen(false);
+              setImportStatusMessage(null);
+            }}
+            title="Import Backup(JSON)"
+            subtitle="Restore secure data when changing to a new phone"
+          // icon="📥"
+          >
+            <ScrollView style={{ maxHeight: 420 }} showsVerticalScrollIndicator={false}>
+              {/* <Text style={{ fontSize: 12, color: colors.textMuted, lineHeight: 17, marginBottom: 12 }}>
             Switching devices? Select your encrypted backup file or paste the backup text below. The app will automatically verify the tamper hash and securely decrypt your ledger, accounts, debts, and budgets.
           </Text> */}
 
-            {/* Option 1: Pick File */}
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={handlePickBackupFile}
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                paddingVertical: 12,
-                paddingHorizontal: 16,
-                borderRadius: 16,
-                backgroundColor: colors.primaryAccentLight || '#fff4e6',
-                borderWidth: 0,
-                borderColor: 'transparent',
-                marginBottom: 12,
-              }}
-            >
-              <Ionicons name="folder-open" size={18} color={colors.activeTabTint || colors.textMain} />
-              <Text style={{ fontSize: 13, fontWeight: '800', color: colors.activeTabTint || colors.textMain }}>
-                Select .json Backup File from Device
-              </Text>
-            </TouchableOpacity>
+              {/* Option 1: Pick File */}
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={handlePickBackupFile}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  paddingVertical: 12,
+                  paddingHorizontal: 16,
+                  borderRadius: 16,
+                  backgroundColor: colors.primaryAccentLight || '#fff4e6',
+                  borderWidth: 0,
+                  borderColor: 'transparent',
+                  marginBottom: 12,
+                }}
+              >
+                <Ionicons name="folder-open" size={18} color={colors.activeTabTint || colors.textMain} />
+                <Text style={{ fontSize: 13, fontWeight: '800', color: colors.activeTabTint || colors.textMain }}>
+                  Select .json Backup File from Device
+                </Text>
+              </TouchableOpacity>
 
-            {importStatusMessage && (
-              <View style={{ backgroundColor: colors.primaryGreenLight || '#eaf4eb', padding: 10, borderRadius: 12, marginBottom: 12, borderWidth: 0, borderColor: 'transparent' }}>
-                <Text style={{ fontSize: 12, fontWeight: '700', color: colors.primaryGreen }}>
-                  ✅ {importStatusMessage}
+              {importStatusMessage && (
+                <View style={{ backgroundColor: colors.primaryGreenLight || '#eaf4eb', padding: 10, borderRadius: 12, marginBottom: 12, borderWidth: 0, borderColor: 'transparent' }}>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: colors.primaryGreen }}>
+                    ✅ {importStatusMessage}
+                  </Text>
+                </View>
+              )}
+
+              <View style={{ backgroundColor: colors.warningLight, padding: 10, borderRadius: 12, marginBottom: 14, borderWidth: 0, borderColor: 'transparent' }}>
+                <Text style={{ fontSize: 11, color: colors.warning, lineHeight: 15, fontWeight: '600' }}>
+                  ⚠️ Restoring will overwrite existing records with the data from this backup.
                 </Text>
               </View>
-            )}
 
-            <View style={{ backgroundColor: colors.warningLight, padding: 10, borderRadius: 12, marginBottom: 14, borderWidth: 0, borderColor: 'transparent' }}>
-              <Text style={{ fontSize: 11, color: colors.warning, lineHeight: 15, fontWeight: '600' }}>
-                ⚠️ Restoring will overwrite existing records with the data from this backup.
-              </Text>
-            </View>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                disabled={isImporting}
+                onPress={handleConfirmImport}
+                style={[
+                  styles.submitButton,
+                  { backgroundColor: colors.primaryAccent, opacity: isImporting ? 0.6 : 1 },
+                ]}
+              >
+                <Text style={[styles.submitButtonText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}>
+                  {isImporting ? 'Restoring Data...' : 'Confirm & Restore Previous Data'}
+                </Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </AestheticModal>
 
-            <TouchableOpacity
-              activeOpacity={0.8}
-              disabled={isImporting}
-              onPress={handleConfirmImport}
-              style={[
-                styles.submitButton,
-                { backgroundColor: colors.primaryAccent, opacity: isImporting ? 0.6 : 1 },
-              ]}
-            >
-              <Text style={[styles.submitButtonText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}>
-                {isImporting ? 'Restoring Data...' : 'Confirm & Restore Previous Data'}
-              </Text>
-            </TouchableOpacity>
-          </ScrollView>
-        </AestheticModal>
+          {/* Base Salary Admin Setup Modal */}
+          <BaseSalarySetupModal
+            visible={isSalaryAdminModalOpen}
+            onClose={() => setIsSalaryAdminModalOpen(false)}
+            onSaveSalary={async (amount, dayStr, accId) => {
+              await configureBaseSalary(amount, dayStr, undefined, accId);
+              setIsSalaryAdminModalOpen(false);
+            }}
+            onSkipSalary={async () => {
+              await skipBaseSalary();
+              setIsSalaryAdminModalOpen(false);
+            }}
+            initialSalary={salary}
+            initialDay={baseSalaryDate}
+            forceConfigureStep={true}
+          />
 
-        {/* Base Salary Admin Setup Modal */}
-        <BaseSalarySetupModal
-          visible={isSalaryAdminModalOpen}
-          onClose={() => setIsSalaryAdminModalOpen(false)}
-          onSaveSalary={async (amount, dayStr) => {
-            await configureBaseSalary(amount, dayStr);
-            setIsSalaryAdminModalOpen(false);
-          }}
-          onSkipSalary={async () => {
-            await skipBaseSalary();
-            setIsSalaryAdminModalOpen(false);
-          }}
-          initialSalary={salary}
-          initialDay={baseSalaryDate}
-          forceConfigureStep={true}
-        />
+          {/* Change PIN Modal (Admin or Account) */}
+          <AestheticModal
+            visible={pinChangeTarget !== null}
+            onClose={() => {
+              setPinChangeTarget(null);
+              setNewPinInput('');
+              setPinChangeError('');
+            }}
+            title={pinChangeTarget === 'admin' ? 'Change Admin Access PIN' : 'Change Account Vault PIN'}
+            subtitle={`Enter a new 4-digit security PIN for ${pinChangeTarget === 'admin' ? 'Admin Access' : 'Account Vault'}`}
+            icon="🔑"
+          >
+            <View style={{ alignItems: 'center', paddingVertical: 12 }}>
+              {/* 4 Dots */}
+              <View style={{ flexDirection: 'row', gap: 14, marginBottom: 16 }}>
+                {[0, 1, 2, 3].map((idx) => {
+                  const isFilled = newPinInput.length > idx;
+                  return (
+                    <View
+                      key={idx}
+                      style={{
+                        width: 20,
+                        height: 20,
+                        borderRadius: 10,
+                        borderWidth: 2,
+                        borderColor: isFilled ? colors.primaryAccent : colors.textMuted,
+                        backgroundColor: isFilled ? colors.primaryAccent : colors.bgSecondary,
+                      }}
+                    />
+                  );
+                })}
+              </View>
 
-        {/* Change PIN Modal (Admin or Account) */}
-        <AestheticModal
-          visible={pinChangeTarget !== null}
-          onClose={() => {
-            setPinChangeTarget(null);
-            setNewPinInput('');
-            setPinChangeError('');
-          }}
-          title={pinChangeTarget === 'admin' ? 'Change Admin Access PIN' : 'Change Account Vault PIN'}
-          subtitle={`Enter a new 4-digit security PIN for ${pinChangeTarget === 'admin' ? 'Admin Access' : 'Account Vault'}`}
-          icon="🔑"
-        >
-          <View style={{ alignItems: 'center', paddingVertical: 12 }}>
-            {/* 4 Dots */}
-            <View style={{ flexDirection: 'row', gap: 14, marginBottom: 16 }}>
-              {[0, 1, 2, 3].map((idx) => {
-                const isFilled = newPinInput.length > idx;
-                return (
-                  <View
-                    key={idx}
-                    style={{
-                      width: 18,
-                      height: 18,
-                      borderRadius: 9,
-                      borderWidth: 2,
-                      borderColor: colors.borderAccent || colors.primaryAccent,
-                      backgroundColor: isFilled ? colors.primaryAccent : 'transparent',
-                    }}
-                  />
-                );
-              })}
-            </View>
+              {pinChangeError ? (
+                <Text style={{ fontSize: 13, fontWeight: '700', color: colors.danger, marginBottom: 12 }}>
+                  {pinChangeError}
+                </Text>
+              ) : (
+                <Text style={{ fontSize: 13, fontWeight: '600', color: colors.textMuted, marginBottom: 12 }}>
+                  Enter exactly 4 digits
+                </Text>
+              )}
 
-            {pinChangeError ? (
-              <Text style={{ fontSize: 13, fontWeight: '700', color: colors.danger, marginBottom: 12 }}>
-                {pinChangeError}
-              </Text>
-            ) : (
-              <Text style={{ fontSize: 13, fontWeight: '600', color: colors.textMuted, marginBottom: 12 }}>
-                Enter exactly 4 digits
-              </Text>
-            )}
-
-            {/* Keypad */}
-            <View style={{ width: '100%', gap: 10, marginBottom: 16 }}>
-              {[
-                ['1', '2', '3'],
-                ['4', '5', '6'],
-                ['7', '8', '9'],
-                ['', '0', 'delete'],
-              ].map((row, rIdx) => (
-                <View key={rIdx} style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 10 }}>
-                  {row.map((item, cIdx) => {
-                    if (item === '') {
-                      return <View key={cIdx} style={{ flex: 1, height: 50 }} />;
-                    }
-                    if (item === 'delete') {
+              {/* Keypad */}
+              <View style={{ width: '100%', gap: 10, marginBottom: 16 }}>
+                {[
+                  ['1', '2', '3'],
+                  ['4', '5', '6'],
+                  ['7', '8', '9'],
+                  ['', '0', 'delete'],
+                ].map((row, rIdx) => (
+                  <View key={rIdx} style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 10 }}>
+                    {row.map((item, cIdx) => {
+                      if (item === '') {
+                        return <View key={cIdx} style={{ flex: 1, height: 50 }} />;
+                      }
+                      if (item === 'delete') {
+                        return (
+                          <TouchableOpacity
+                            key={cIdx}
+                            activeOpacity={0.7}
+                            onPress={() => {
+                              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                              setPinChangeError('');
+                              setNewPinInput((prev) => prev.slice(0, -1));
+                            }}
+                            style={{
+                              flex: 1,
+                              height: 50,
+                              borderRadius: 16,
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              backgroundColor: colors.bgSecondary,
+                              borderColor: 'transparent',
+                              borderWidth: 0,
+                            }}
+                          >
+                            <Ionicons name="backspace-outline" size={22} color={colors.textMain} />
+                          </TouchableOpacity>
+                        );
+                      }
                       return (
                         <TouchableOpacity
                           key={cIdx}
                           activeOpacity={0.7}
                           onPress={() => {
-                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                             setPinChangeError('');
-                            setNewPinInput((prev) => prev.slice(0, -1));
+                            if (newPinInput.length < 4) {
+                              setNewPinInput((prev) => prev + item);
+                            }
                           }}
                           style={{
                             flex: 1,
@@ -2640,162 +2829,138 @@ export const AdminDashboardView: React.FC = () => {
                             borderWidth: 0,
                           }}
                         >
-                          <Ionicons name="backspace-outline" size={22} color={colors.textMain} />
+                          <Text style={{ fontSize: 20, fontWeight: '800', color: colors.textMain }}>{item}</Text>
                         </TouchableOpacity>
                       );
-                    }
-                    return (
-                      <TouchableOpacity
-                        key={cIdx}
-                        activeOpacity={0.7}
-                        onPress={() => {
-                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                          setPinChangeError('');
-                          if (newPinInput.length < 4) {
-                            setNewPinInput((prev) => prev + item);
-                          }
-                        }}
-                        style={{
-                          flex: 1,
-                          height: 50,
-                          borderRadius: 16,
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          backgroundColor: colors.bgSecondary,
-                          borderColor: 'transparent',
-                          borderWidth: 0,
-                        }}
-                      >
-                        <Text style={{ fontSize: 20, fontWeight: '800', color: colors.textMain }}>{item}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              ))}
+                    })}
+                  </View>
+                ))}
+              </View>
+
+              <TouchableOpacity
+                onPress={handleSavePin}
+                style={[styles.submitButton, { width: '100%', backgroundColor: colors.primaryAccent }]}
+              >
+                <Text style={[styles.submitButtonText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}>
+                  Save New PIN 💾
+                </Text>
+              </TouchableOpacity>
             </View>
+          </AestheticModal>
 
-            <TouchableOpacity
-              onPress={handleSavePin}
-              style={[styles.submitButton, { width: '100%', backgroundColor: colors.primaryAccent }]}
-            >
-              <Text style={[styles.submitButtonText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}>
-                Save New PIN 💾
+          {/* Select Salary Deposit Account Modal */}
+          <AestheticModal
+            visible={isSalaryBankModalOpen}
+            onClose={() => setIsSalaryBankModalOpen(false)}
+            title="Select Salary Bank Account"
+            subtitle="Choose which bank stores your monthly salary for records"
+            icon="💼"
+          >
+            <View style={{ gap: 10, paddingVertical: 8 }}>
+              {accounts.map((acc) => {
+                const isSelected = acc.id === salaryAccountId;
+                return (
+                  <TouchableOpacity
+                    key={acc.id}
+                    onPress={async () => {
+                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                      await setSalaryAccountId(acc.id);
+                      setIsSalaryBankModalOpen(false);
+                    }}
+                    style={[
+                      styles.accountSelectRow,
+                      {
+                        backgroundColor: isSelected ? colors.primaryGreenLight : colors.bgSecondary,
+                        borderColor: isSelected ? colors.primaryGreen : colors.borderSoft,
+                      },
+                    ]}
+                  >
+                    <Text style={{ fontSize: 24, marginRight: 12 }}>{acc.emoji}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.accountSelectName, { color: colors.textMain }]}>{acc.name}</Text>
+                      <Text style={[styles.accountSelectType, { color: colors.textMuted }]}>
+                        {acc.type.toUpperCase()} • {currencySymbol} {acc.balance.toLocaleString()}
+                      </Text>
+                    </View>
+                    {isSelected && (
+                      <Ionicons name="checkmark-circle" size={22} color={colors.primaryGreen} />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </AestheticModal>
+
+          {/* Admin Initial Money for Cash in Hand Modal */}
+          <AestheticModal
+            visible={isInitialCashAdminModalOpen}
+            onClose={() => setIsInitialCashAdminModalOpen(false)}
+            title="Cash in Hand Initial Money 💵"
+            subtitle="Set baseline liquid opening cash (does not create an incoming transaction)"
+            icon="💵"
+          >
+            <View style={{ paddingVertical: 6 }}>
+              <Text style={{ fontSize: 12, color: colors.textMuted, marginBottom: 12, lineHeight: 17 }}>
+                Specify the starting liquid money you held before using the app. This balance is reflected directly in your Cash in Hand account and net worth, without polluting your income ledger or transaction log.
               </Text>
-            </TouchableOpacity>
-          </View>
-        </AestheticModal>
-
-        {/* Select Salary Deposit Account Modal */}
-        <AestheticModal
-          visible={isSalaryBankModalOpen}
-          onClose={() => setIsSalaryBankModalOpen(false)}
-          title="Select Salary Bank Account"
-          subtitle="Choose which bank stores your monthly salary for records"
-          icon="💼"
-        >
-          <View style={{ gap: 10, paddingVertical: 8 }}>
-            {accounts.map((acc) => {
-              const isSelected = acc.id === salaryAccountId;
-              return (
-                <TouchableOpacity
-                  key={acc.id}
-                  onPress={async () => {
-                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                    await setSalaryAccountId(acc.id);
-                    setIsSalaryBankModalOpen(false);
-                  }}
+              <View style={styles.formGroup}>
+                <Text style={[styles.inputLabel, { color: colors.textMain }]}>Initial Cash in Hand ({currencySymbol})</Text>
+                <TextInput
                   style={[
-                    styles.accountSelectRow,
+                    styles.input,
                     {
-                      backgroundColor: isSelected ? colors.primaryGreenLight : colors.bgSecondary,
-                      borderColor: isSelected ? colors.primaryGreen : colors.borderSoft,
+                      backgroundColor: colors.bgSecondary,
+                      color: colors.textMain,
+                      borderColor: colors.borderSoft,
+                      fontSize: 16,
+                      fontWeight: '700',
                     },
                   ]}
-                >
-                  <Text style={{ fontSize: 24, marginRight: 12 }}>{acc.emoji}</Text>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.accountSelectName, { color: colors.textMain }]}>{acc.name}</Text>
-                    <Text style={[styles.accountSelectType, { color: colors.textMuted }]}>
-                      {acc.type.toUpperCase()} • {currencySymbol} {acc.balance.toLocaleString()}
-                    </Text>
-                  </View>
-                  {isSelected && (
-                    <Ionicons name="checkmark-circle" size={22} color={colors.primaryGreen} />
-                  )}
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </AestheticModal>
+                  placeholder="e.g. 5000"
+                  placeholderTextColor={colors.textMuted}
+                  keyboardType="numeric"
+                  value={initialCashAdminInput}
+                  onChangeText={setInitialCashAdminInput}
+                />
+              </View>
 
-        {/* Admin Initial Money for Cash in Hand Modal */}
-        <AestheticModal
-          visible={isInitialCashAdminModalOpen}
-          onClose={() => setIsInitialCashAdminModalOpen(false)}
-          title="Cash in Hand Initial Money 💵"
-          subtitle="Set baseline liquid opening cash (does not create an incoming transaction)"
-          icon="💵"
-        >
-          <View style={{ paddingVertical: 6 }}>
-            <Text style={{ fontSize: 12, color: colors.textMuted, marginBottom: 12, lineHeight: 17 }}>
-              Specify the starting liquid money you held before using the app. This balance is reflected directly in your Cash in Hand account and net worth, without polluting your income ledger or transaction log.
-            </Text>
-            <View style={styles.formGroup}>
-              <Text style={[styles.inputLabel, { color: colors.textMain }]}>Initial Cash in Hand ({currencySymbol})</Text>
-              <TextInput
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: colors.bgSecondary,
-                    color: colors.textMain,
-                    borderColor: colors.borderSoft,
-                    fontSize: 16,
-                    fontWeight: '700',
-                  },
-                ]}
-                placeholder="e.g. 5000"
-                placeholderTextColor={colors.textMuted}
-                keyboardType="numeric"
-                value={initialCashAdminInput}
-                onChangeText={setInitialCashAdminInput}
-              />
+              <TouchableOpacity
+                onPress={async () => {
+                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                  const val = parseFloat(initialCashAdminInput) || 0;
+                  const success = await setCashInHandInitialMoney(val);
+                  if (success) {
+                    setIsInitialCashAdminModalOpen(false);
+                  }
+                }}
+                style={[styles.submitButton, { backgroundColor: colors.primaryAccent }]}
+              >
+                <Text style={[styles.submitButtonText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}>Save Initial Money 💵</Text>
+              </TouchableOpacity>
             </View>
+          </AestheticModal>
 
-            <TouchableOpacity
-              onPress={async () => {
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                const val = parseFloat(initialCashAdminInput) || 0;
-                await setCashInHandInitialMoney(val);
-                setIsInitialCashAdminModalOpen(false);
-              }}
-              style={[styles.submitButton, { backgroundColor: colors.primaryAccent }]}
-            >
-              <Text style={[styles.submitButtonText, { color: colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214') }]}>Save Initial Money 💵</Text>
-            </TouchableOpacity>
+          {/* Link / Change Recovery Email Modal with OTP Code Verification */}
+          <EmailVerificationModal
+            visible={isLinkEmailModalOpen}
+            onClose={() => setIsLinkEmailModalOpen(false)}
+            badgeText="SECURITY • EMAIL VERIFICATION"
+            title="Change Recovery Email ✉️"
+            subtitle="A 6-digit code will be sent to your new email before updating."
+            finishBtnText="Save New Email ✨"
+            onVerifiedFinish={async () => {
+              setIsLinkEmailModalOpen(false);
+              Alert.alert('Email Updated 🎉', 'Your recovery email has been successfully updated and verified.');
+            }}
+          />
+          {/* Totoro Parade Footer in Admin Dashboard */}
+          <View style={{ alignItems: 'center', marginTop: 18, marginBottom: 8 }}>
+            <TotoroSticker type="parade" height={44} />
           </View>
-        </AestheticModal>
-
-        {/* Link / Change Recovery Email Modal with OTP Code Verification */}
-        <EmailVerificationModal
-          visible={isLinkEmailModalOpen}
-          onClose={() => setIsLinkEmailModalOpen(false)}
-          badgeText="SECURITY • EMAIL VERIFICATION"
-          title="Change Recovery Email ✉️"
-          subtitle="A 6-digit code will be sent to your new email before updating."
-          finishBtnText="Save New Email ✨"
-          onVerifiedFinish={async () => {
-            setIsLinkEmailModalOpen(false);
-            Alert.alert('Email Updated 🎉', 'Your recovery email has been successfully updated and verified.');
-          }}
-        />
-        {/* Totoro Parade Footer in Admin Dashboard */}
-        <View style={{ alignItems: 'center', marginTop: 18, marginBottom: 8 }}>
-          <TotoroSticker type="parade" height={44} />
-        </View>
-      </ScrollView>
-    </ImageBackground>
-  </SafeAreaView>
-);
+        </ScrollView>
+      </ImageBackground>
+    </SafeAreaView>
+  );
 };
 
 const styles = StyleSheet.create({
@@ -3197,6 +3362,31 @@ const styles = StyleSheet.create({
   currencyAdminChipText: {
     fontSize: 13,
     fontWeight: '700',
+  },
+  currencyRemoveBtn: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#ef4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.25,
+    shadowRadius: 1.5,
+    elevation: 3,
+  },
+  currencyRemoveBtnText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '900',
+    lineHeight: 16,
+    textAlign: 'center',
+    marginTop: -2,
   },
   customAdminCurrencyRow: {
     flexDirection: 'row',

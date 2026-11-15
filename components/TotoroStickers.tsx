@@ -97,6 +97,31 @@ export const CAT_ASSETS: Record<string, any> = {
   cat: require('@/assets/images/stickers/cat_peeking_trans.png'),
 };
 
+// 4. Penguin - Chubby Baby Penguin Sticker Assets
+export const PENGUIN_ASSETS: Record<string, any> = {
+  big: require('@/assets/images/stickers/penguin_hero.png'),
+  hero: require('@/assets/images/stickers/penguin_hero.png'),
+  leaf: require('@/assets/images/stickers/penguin_income.png'),
+  income: require('@/assets/images/stickers/penguin_income.png'),
+  peek: require('@/assets/images/stickers/penguin_spent.png'),
+  spent: require('@/assets/images/stickers/penguin_spent.png'),
+  savings: require('@/assets/images/stickers/penguin_salary.png'),
+  salary: require('@/assets/images/stickers/penguin_salary.png'),
+  remaining: require('@/assets/images/stickers/penguin_remaining.png'),
+  vault: require('@/assets/images/stickers/penguin_vault.png'),
+  wishlist: require('@/assets/images/stickers/penguin_wishlist.png'),
+  borrow_lent: require('@/assets/images/stickers/penguin_borrow_lent.png'),
+  debt: require('@/assets/images/stickers/penguin_borrow_lent.png'),
+  parade: require('@/assets/images/stickers/penguin_parade.png'),
+  star: require('@/assets/images/stickers/penguin_star.png'),
+  app_icon: require('@/assets/images/stickers/penguin_icon.png'),
+  curious: require('@/assets/images/stickers/penguin_curious.png'),
+  shout: require('@/assets/images/stickers/penguin_shout.png'),
+  plant: require('@/assets/images/stickers/hanging_plant_trans.png'),
+  cat: require('@/assets/images/stickers/penguin_icon.png'),
+};
+
+
 export interface TotoroStickerProps {
   type: TotoroStickerType;
   pack?: StickerPack;
@@ -130,6 +155,8 @@ export const TotoroSticker: React.FC<TotoroStickerProps> = ({
       ? SPY_FAMILY_ASSETS
       : effectivePack === 'cat'
       ? CAT_ASSETS
+      : effectivePack === 'penguin'
+      ? PENGUIN_ASSETS
       : TOTORO_ASSETS;
 
   const source = packMap[type] || TOTORO_ASSETS[type] || TOTORO_ASSETS.big;
@@ -140,11 +167,11 @@ export const TotoroSticker: React.FC<TotoroStickerProps> = ({
 
   if (type === 'parade') {
     h = height || 68;
-    const ratio = effectivePack === 'spy_family' ? 2.34 : effectivePack === 'cat' ? 2.63 : 3.02;
+    const ratio = effectivePack === 'spy_family' ? 2.34 : effectivePack === 'cat' ? 2.63 : effectivePack === 'penguin' ? 2.86 : 3.02;
     w = width || Math.round(h * ratio);
   } else if (type === 'peek' || type === 'spent') {
     h = height || size || 64;
-    const ratio = effectivePack === 'spy_family' ? 1.03 : effectivePack === 'cat' ? 1.01 : 0.93;
+    const ratio = effectivePack === 'spy_family' ? 1.03 : effectivePack === 'cat' ? 1.01 : effectivePack === 'penguin' ? 0.96 : 0.93;
     w = width || (size ? Math.round(size * ratio) : 64);
   } else if (type === 'plant') {
     h = height || size || 60;
@@ -157,34 +184,34 @@ export const TotoroSticker: React.FC<TotoroStickerProps> = ({
     h = size || height || 28;
   } else if (type === 'leaf' || type === 'income') {
     h = height || size || 60;
-    const ratio = effectivePack === 'spy_family' ? 0.98 : effectivePack === 'cat' ? 0.82 : 0.72;
+    const ratio = effectivePack === 'spy_family' ? 0.98 : effectivePack === 'cat' ? 0.82 : effectivePack === 'penguin' ? 0.96 : 0.72;
     w = width || (size ? Math.round(size * ratio) : 48);
   } else if (type === 'big' || type === 'hero' || type === 'remaining') {
     h = height || size || 60;
-    const ratio = effectivePack === 'spy_family' ? 0.65 : effectivePack === 'cat' ? 0.90 : 0.79;
+    const ratio = effectivePack === 'spy_family' ? 0.65 : effectivePack === 'cat' ? 0.90 : effectivePack === 'penguin' ? 0.90 : 0.79;
     w = width || (size ? Math.round(size * ratio) : 48);
   } else if (type === 'curious' || type === 'shout') {
     h = height || size || 46;
     w = width || (size ? Math.round(size * 0.95) : 44);
   } else if (type === 'savings' || type === 'salary') {
     h = height || size || 60;
-    const ratio = effectivePack === 'spy_family' ? 0.83 : effectivePack === 'cat' ? 0.95 : 0.85;
+    const ratio = effectivePack === 'spy_family' ? 0.83 : effectivePack === 'cat' ? 0.95 : effectivePack === 'penguin' ? 1.17 : 0.85;
     w = width || (size ? Math.round(size * ratio) : 52);
   } else if (type === 'vault') {
     h = height || size || 70;
-    const ratio = effectivePack === 'spy_family' ? 1.07 : effectivePack === 'cat' ? 0.66 : 0.81;
+    const ratio = effectivePack === 'spy_family' ? 1.07 : effectivePack === 'cat' ? 0.66 : effectivePack === 'penguin' ? 2.15 : 0.81;
     w = width || (size ? Math.round(size * ratio) : 56);
   } else if (type === 'wishlist') {
     h = height || size || 66;
-    const ratio = effectivePack === 'spy_family' ? 0.76 : effectivePack === 'cat' ? 0.81 : 0.79;
+    const ratio = effectivePack === 'spy_family' ? 0.76 : effectivePack === 'cat' ? 0.81 : effectivePack === 'penguin' ? 0.94 : 0.79;
     w = width || (size ? Math.round(size * ratio) : 52);
   } else if (type === 'borrow_lent' || type === 'debt') {
     h = height || size || 60;
-    const ratio = effectivePack === 'spy_family' ? 1.05 : effectivePack === 'cat' ? 0.90 : 1.23;
+    const ratio = effectivePack === 'spy_family' ? 1.05 : effectivePack === 'cat' ? 0.90 : effectivePack === 'penguin' ? 1.74 : 1.23;
     w = width || (size ? Math.round(size * ratio) : 74);
   } else if (type === 'app_icon') {
     h = height || size || 72;
-    const ratio = effectivePack === 'spy_family' ? 0.99 : effectivePack === 'cat' ? 0.90 : 0.88;
+    const ratio = effectivePack === 'spy_family' ? 0.99 : effectivePack === 'cat' ? 0.90 : effectivePack === 'penguin' ? 0.84 : 0.88;
     w = width || (size ? Math.round(size * ratio) : 63);
   }
 

@@ -7,8 +7,9 @@ const http = require('http');
 const path = require('path');
 const dotenv = require('dotenv');
 
-// Load environment variables from local .env
+// Load environment variables from local .env or root .env
 dotenv.config({ path: path.join(__dirname, '.env') });
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 const nodemailer = require('nodemailer');
 
@@ -61,7 +62,7 @@ const server = http.createServer(async (req, res) => {
         const senderEmail = (
           process.env.GMAIL_USER ||
           process.env.SYSTEM_EMAIL ||
-          'cindrellakoju@gmail.com'
+          'cashly.expensetracker@gmail.com'
         ).trim();
 
         const appPassword = (
@@ -151,7 +152,7 @@ const server = http.createServer(async (req, res) => {
         const senderEmail = (
           process.env.GMAIL_USER ||
           process.env.SYSTEM_EMAIL ||
-          'cindrellakoju@gmail.com'
+          'cashly.expensetracker@gmail.com'
         ).trim();
 
         const appPassword = (

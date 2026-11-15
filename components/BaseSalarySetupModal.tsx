@@ -21,7 +21,7 @@ import { TotoroSticker } from '@/components/TotoroStickers';
 interface BaseSalarySetupModalProps {
   visible: boolean;
   onClose: () => void;
-  onSaveSalary: (amount: number, dayStr: string) => Promise<void>;
+  onSaveSalary: (amount: number, dayStr: string, accountId?: string) => Promise<void>;
   onSkipSalary: () => Promise<void>;
   initialSalary?: number;
   initialDay?: string;
@@ -76,6 +76,9 @@ export const BaseSalarySetupModal: React.FC<BaseSalarySetupModalProps> = ({
     markWelcomeShown,
     currencySymbol,
     setCurrencySymbol,
+    customCurrencies,
+    addCustomCurrency,
+    removeCustomCurrency,
     recoveryEmail,
     setRecoveryEmail,
   } = useFinancial();
@@ -88,6 +91,7 @@ export const BaseSalarySetupModal: React.FC<BaseSalarySetupModalProps> = ({
   const [selectedCurrency, setSelectedCurrency] = useState<string>(currencySymbol || 'Rs.');
   const [isCustomCurrency, setIsCustomCurrency] = useState<boolean>(false);
   const [customCurrencyText, setCustomCurrencyText] = useState<string>('');
+  const [selectedAccountId, setSelectedAccountId] = useState<string>(salaryAccountId || accounts[0]?.id || '1');
   const [emailInput, setEmailInput] = useState<string>(recoveryEmail || '');
   const [emailError, setEmailError] = useState<string>('');
   const [isSalarySkipped, setIsSalarySkipped] = useState<boolean>(false);
@@ -177,7 +181,7 @@ export const BaseSalarySetupModal: React.FC<BaseSalarySetupModalProps> = ({
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setIsSalarySkipped(false);
-    await onSaveSalary(num, selectedDay);
+    await onSaveSalary(num, selectedDay, selectedAccountId);
     if (forceConfigureStep) {
       onClose();
     }
@@ -283,7 +287,7 @@ export const BaseSalarySetupModal: React.FC<BaseSalarySetupModalProps> = ({
     } else {
       const num = parseFloat(salaryAmount.replace(/,/g, ''));
       if (!isNaN(num) && num > 0) {
-        await onSaveSalary(num, selectedDay);
+        await onSaveSalary(num, selectedDay, selectedAccountId);
       } else {
         await onSkipSalary();
       }
@@ -315,25 +319,25 @@ export const BaseSalarySetupModal: React.FC<BaseSalarySetupModalProps> = ({
           </TouchableWithoutFeedback>
         )}
 
-        <View
-          style={[
-            styles.modalCard,
-            {
-              backgroundColor: colors.bgCard,
-              borderColor: 'transparent',
-              borderWidth: 0,
-              borderRadius: 24,
-              position: 'relative',
-              overflow: 'visible',
-              ...colors.cardShadow,
-            },
-          ]}
-        >
+        <View style={styles.modalCardWrapper}>
           <TotoroSticker
             type="savings"
-            size={64}
-            style={{ position: 'absolute', top: -28, right: 18, zIndex: 10 }}
+            size={48}
+            style={{ position: 'absolute', top: 12, right: forceConfigureStep ? 50 : 16, zIndex: 20 }}
           />
+          <View
+            style={[
+              styles.modalCard,
+              {
+                backgroundColor: colors.bgCard,
+                borderColor: colors.borderSoft,
+                borderWidth: 1,
+                borderRadius: 24,
+                overflow: 'hidden',
+                ...colors.cardShadow,
+              },
+            ]}
+          >
             {step === 'ask' ? (
               /* ==================== STEP 1: ASK USER ==================== */
               <ScrollView
@@ -413,6 +417,58 @@ export const BaseSalarySetupModal: React.FC<BaseSalarySetupModalProps> = ({
                       );
                     })}
 
+                    {/* Saved Custom Metrics beside Rs., $ */}
+                    {customCurrencies.map((customSym) => {
+                      const isSelected = !isCustomCurrency && (selectedCurrency === customSym || currencySymbol === customSym);
+                      return (
+                        <View key={customSym} style={{ position: 'relative', overflow: 'visible' }}>
+                          <TouchableOpacity
+                            activeOpacity={0.7}
+                            onPress={() => {
+                              setIsCustomCurrency(false);
+                              handleSelectCurrency(customSym);
+                            }}
+                            style={[
+                              styles.currencyChip,
+                              {
+                                backgroundColor: isSelected ? colors.primaryAccent : colors.bgCard,
+                                borderColor: isSelected ? (colors.borderAccent || colors.primaryAccent) : colors.borderSoft,
+                                paddingRight: 16,
+                              },
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.currencyChipText,
+                                {
+                                  color: isSelected ? (colors.textOnAccent || '#121214') : colors.textMain,
+                                  fontWeight: isSelected ? '800' : '600',
+                                },
+                              ]}
+                            >
+                              {customSym}
+                            </Text>
+                          </TouchableOpacity>
+
+                          {/* Minus "-" button on top to remove it */}
+                          <TouchableOpacity
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            onPress={async (e) => {
+                              e?.stopPropagation?.();
+                              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                              await removeCustomCurrency(customSym);
+                              if (selectedCurrency === customSym) {
+                                handleSelectCurrency('Rs.');
+                              }
+                            }}
+                            style={styles.currencyRemoveBtn}
+                          >
+                            <Text style={styles.currencyRemoveBtnText}>-</Text>
+                          </TouchableOpacity>
+                        </View>
+                      );
+                    })}
+
                     <TouchableOpacity
                       activeOpacity={0.7}
                       onPress={handleSelectCustomCurrency}
@@ -427,26 +483,42 @@ export const BaseSalarySetupModal: React.FC<BaseSalarySetupModalProps> = ({
                       <Text
                         style={[
                           styles.currencyChipText,
-                          { color: isCustomCurrency ? '#2c352d' : colors.textMain, fontWeight: isCustomCurrency ? '800' : '600' },
+                          { color: isCustomCurrency ? (colors.textOnAccent || '#2c352d') : colors.textMain, fontWeight: isCustomCurrency ? '800' : '600' },
                         ]}
                       >
-                        Custom
+                        + Custom
                       </Text>
                     </TouchableOpacity>
                   </View>
 
                   {isCustomCurrency && (
                     <View style={[styles.customCurrencyInputRow, { backgroundColor: colors.bgCard, borderColor: colors.borderSoft }]}>
-                      <Text style={[styles.customCurrencyLabel, { color: colors.textMuted }]}>Symbol / Code:</Text>
+                      <Text style={[styles.customCurrencyLabel, { color: colors.textMuted }]}>Metric / Symbol:</Text>
                       <TextInput
                         style={[styles.customCurrencyInput, { color: colors.textMain }]}
                         placeholder="e.g. NPR, USD, CAD"
                         placeholderTextColor={colors.textSubtle}
                         value={customCurrencyText}
-                        onChangeText={handleCustomCurrencyChange}
+                        onChangeText={setCustomCurrencyText}
                         maxLength={8}
                         autoCapitalize="characters"
                       />
+                      <TouchableOpacity
+                        activeOpacity={0.8}
+                        onPress={async () => {
+                          const val = customCurrencyText.trim();
+                          if (val) {
+                            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                            await addCustomCurrency(val);
+                            handleSelectCurrency(val);
+                            setIsCustomCurrency(false);
+                            setCustomCurrencyText('');
+                          }
+                        }}
+                        style={[styles.customCurrencySaveBtn, { backgroundColor: colors.primaryAccent }]}
+                      >
+                        <Text style={[styles.customCurrencySaveBtnText, { color: colors.textOnAccent || '#121214' }]}>Save</Text>
+                      </TouchableOpacity>
                     </View>
                   )}
                 </View>
@@ -548,7 +620,7 @@ export const BaseSalarySetupModal: React.FC<BaseSalarySetupModalProps> = ({
                 <View style={styles.headerRow}>
                   <View style={styles.titleCol}>
                     <Text style={[styles.modalTitle, { color: colors.textMain }]}>
-                      Configure Base Salary 👛
+                      {forceConfigureStep ? 'Update Base Salary 👛' : 'Configure Base Salary 👛'}
                     </Text>
                     <Text style={[styles.modalSubtitle, { color: colors.textMuted }]}>
                       Amount will be added to Income on your selected date
@@ -698,8 +770,51 @@ export const BaseSalarySetupModal: React.FC<BaseSalarySetupModalProps> = ({
                     })}
                   </View>
 
+                  {/* Destination Account Selection */}
+                  {accounts.length > 0 && (
+                    <View style={{ marginTop: 12 }}>
+                      <Text style={[styles.inputLabel, { color: colors.textMain, marginBottom: 6 }]}>
+                        Deposit Bank / Account:
+                      </Text>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} nestedScrollEnabled={true}>
+                        {accounts.map((acc) => {
+                          const isAccSelected = selectedAccountId === acc.id;
+                          return (
+                            <TouchableOpacity
+                              key={acc.id}
+                              activeOpacity={0.75}
+                              onPress={() => setSelectedAccountId(acc.id)}
+                              style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                gap: 6,
+                                paddingHorizontal: 12,
+                                paddingVertical: 8,
+                                borderRadius: 12,
+                                marginRight: 8,
+                                backgroundColor: isAccSelected ? colors.primaryAccent : colors.bgSecondary,
+                                borderWidth: 0,
+                              }}
+                            >
+                              <Text style={{ fontSize: 16 }}>{acc.emoji}</Text>
+                              <Text
+                                style={{
+                                  fontSize: 12,
+                                  fontWeight: isAccSelected ? '800' : '600',
+                                  color: isAccSelected ? (colors.textOnAccent || '#121214') : colors.textMain,
+                                }}
+                              >
+                                {acc.name}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </ScrollView>
+                    </View>
+                  )}
+
                   {/* Deposit Preview Card */}
-                  <View style={[styles.previewCard, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
+                  <View style={[styles.previewCard, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft, marginTop: 12 }]}>
                     <Ionicons name="calendar" size={16} color={colors.primaryGreen} />
                     <Text style={[styles.previewText, { color: colors.textMuted }]}>
                       Auto-deposit on: <Text style={{ color: colors.textMain, fontWeight: '800' }}>{previewDepositStr}</Text>
@@ -715,7 +830,7 @@ export const BaseSalarySetupModal: React.FC<BaseSalarySetupModalProps> = ({
                     style={[styles.submitButton, { backgroundColor: colors.primaryAccent }]}
                   >
                     <Text style={styles.submitButtonText}>
-                      {forceConfigureStep ? 'Confirm & Add to Income ✨' : 'Finish Setup & Enter Cashly ✨'}
+                      {forceConfigureStep ? 'Save & Update Salary ✨' : 'Finish Setup & Enter Cashly ✨'}
                     </Text>
                   </TouchableOpacity>
 
@@ -915,7 +1030,7 @@ export const BaseSalarySetupModal: React.FC<BaseSalarySetupModalProps> = ({
                         >
                           <Ionicons name="keypad-outline" size={20} color={colors.textMuted} style={{ marginRight: 8 }} />
                           <TextInput
-                            style={[styles.emailInput, { color: colors.textMain, fontSize: 20, letterSpacing: 6, fontWeight: '800' }]}
+                            style={[styles.emailInput, { color: colors.textMain, fontSize: 17, letterSpacing: 1.5, fontWeight: '700' }]}
                             placeholder="123456"
                             placeholderTextColor={colors.textSubtle}
                             keyboardType="number-pad"
@@ -996,6 +1111,7 @@ export const BaseSalarySetupModal: React.FC<BaseSalarySetupModalProps> = ({
             )}
           </View>
         </View>
+      </View>
       </KeyboardAvoidingView>
   );
 
@@ -1029,13 +1145,18 @@ const styles = StyleSheet.create({
   backdropDismissArea: {
     ...StyleSheet.absoluteFill,
   },
-  modalCard: {
+  modalCardWrapper: {
     width: '100%',
     maxWidth: 380,
     maxHeight: '90%',
+    position: 'relative',
+  },
+  modalCard: {
+    width: '100%',
+    maxHeight: '100%',
     borderRadius: 24,
-    borderWidth: 0,
-    padding: 20,
+    borderWidth: 1,
+    padding: 18,
   },
   scrollStep: {
     flexShrink: 1,
@@ -1184,14 +1305,14 @@ const styles = StyleSheet.create({
   dayGridContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
+    gap: 5,
     justifyContent: 'flex-start',
     marginTop: 2,
   },
   dayGridCell: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
+    width: 34,
+    height: 34,
+    borderRadius: 10,
     borderWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1336,6 +1457,42 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
     paddingVertical: 4,
+  },
+  customCurrencySaveBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  customCurrencySaveBtnText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  currencyRemoveBtn: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#ef4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.25,
+    shadowRadius: 1.5,
+    elevation: 3,
+  },
+  currencyRemoveBtnText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '900',
+    lineHeight: 16,
+    textAlign: 'center',
+    marginTop: -2,
   },
   securityInfoCard: {
     padding: 16,

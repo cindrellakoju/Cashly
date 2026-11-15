@@ -21,26 +21,38 @@ import { useFinancial, WishlistItem } from '@/context/FinancialContext';
 import { ThemeHeader } from '@/components/ThemeHeader';
 import { TotoroSticker } from '@/components/TotoroStickers';
 import { AestheticModal } from '@/components/AestheticModal';
+import { CalendarPicker } from '@/components/DatePickerFieldModal';
 import { saveImageToPermanentStorage, resolveImageUrl } from '@/services/imageService';
 
 const { width } = Dimensions.get('window');
 
-const PRESET_WISHLIST_PHOTOS = [
-  { id: 'phone', label: 'Phone', url: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=400&auto=format&fit=crop&q=80' },
-  { id: 'laptop', label: 'Laptop', url: 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=400&auto=format&fit=crop&q=80' },
-  { id: 'car', label: 'Car', url: 'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=400&auto=format&fit=crop&q=80' },
-  { id: 'headphones', label: 'Audio', url: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400&auto=format&fit=crop&q=80' },
-  { id: 'travel', label: 'Travel', url: 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=400&auto=format&fit=crop&q=80' },
-  { id: 'watch', label: 'Watch', url: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&auto=format&fit=crop&q=80' },
-  { id: 'home', label: 'Home', url: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400&auto=format&fit=crop&q=80' },
-];
-
 export default function WishlistScreen() {
-  const { colors, theme, wishlist, addWishlistItem, toggleWishlistPurchased, deleteWishlistItem, currencySymbol } = useFinancial();
+  const {
+    colors,
+    theme,
+    wishlist,
+    accounts,
+    addWishlistItem,
+    toggleWishlistPurchased,
+    completeWishlistItem,
+    uncompleteWishlistItem,
+    deleteWishlistItem,
+    currencySymbol,
+  } = useFinancial();
 
   // Modals & Lightbox
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [previewImageItem, setPreviewImageItem] = useState<WishlistItem | null>(null);
+
+  // Completion Modal State
+  const [completingWish, setCompletingWish] = useState<WishlistItem | null>(null);
+  const [isCompleteModalOpen, setIsCompleteModalOpen] = useState(false);
+  const [completeDate, setCompleteDate] = useState('');
+  const [completeAccount, setCompleteAccount] = useState('');
+  const [isCompleteDatePickerOpen, setIsCompleteDatePickerOpen] = useState(false);
+
+  // Target Date Picker State for Add Modal
+  const [isAddDatePickerOpen, setIsAddDatePickerOpen] = useState(false);
 
   // Form states
   const [wishName, setWishName] = useState('');
@@ -134,12 +146,53 @@ export default function WishlistScreen() {
     setWishName('');
     setWishPrice('');
     setWishImageUrl('');
+    setIsAddDatePickerOpen(false);
     setIsAddModalOpen(false);
   };
 
-  const handleTogglePurchased = (id: string, currentlyPurchased?: boolean) => {
+  const handleTogglePurchased = (item: WishlistItem) => {
+    if (item.isPurchased) {
+      Alert.alert(
+        'Wish Completed 🎉',
+        `Completed on ${item.completedDate || 'earlier'} via ${item.sourceAccount || 'Account'}.\n\nDo you want to unmark this item as completed? (This will refund ${currencySymbol} ${item.price.toLocaleString()} back to ${item.sourceAccount || 'your account'} and remove the transaction).`,
+        [
+          { text: 'Keep Completed', style: 'cancel' },
+          {
+            text: 'Unmark & Refund',
+            style: 'destructive',
+            onPress: () => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              uncompleteWishlistItem(item.id);
+            },
+          },
+        ]
+      );
+    } else {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+      setCompletingWish(item);
+      setCompleteDate(today);
+      setCompleteAccount(accounts[0]?.name || 'Cash in Hand');
+      setIsCompleteDatePickerOpen(false);
+      setIsCompleteModalOpen(true);
+    }
+  };
+
+  const handleConfirmComplete = () => {
+    if (!completingWish) return;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    toggleWishlistPurchased(id);
+    const dateStr = completeDate.trim() || new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    const accName = completeAccount || accounts[0]?.name || 'Cash in Hand';
+
+    completeWishlistItem(completingWish.id, {
+      completedDate: dateStr,
+      sourceAccount: accName,
+      deductMoney: true,
+    });
+
+    setIsCompleteDatePickerOpen(false);
+    setIsCompleteModalOpen(false);
+    setCompletingWish(null);
   };
 
   const handleDelete = (id: string, name: string) => {
@@ -211,7 +264,7 @@ export default function WishlistScreen() {
               },
             ]}
           >
-            <TotoroSticker type="wishlist" size={60} style={{ position: 'absolute', top: -20, right: 14, zIndex: 10 }} />
+            
             <View style={styles.summaryTop}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                 <View style={[styles.paperIconBadge, { backgroundColor: colors.bgSecondary, borderColor: 'transparent' }]}>
@@ -327,10 +380,25 @@ export default function WishlistScreen() {
 
                   <View style={styles.wishFooter}>
                     <View style={{ flex: 1, marginRight: 8 }}>
-                      <Text style={[styles.priceLabel, { color: colors.textMuted }]}>Target Price</Text>
+                      <Text style={[styles.priceLabel, { color: colors.textMuted }]}>
+                        {item.isPurchased ? 'Purchased Price' : 'Target Price'}
+                      </Text>
                       <Text style={[styles.priceVal, { color: colors.textMain }]} numberOfLines={1} adjustsFontSizeToFit>
                         {currencySymbol} {item.price.toLocaleString()}
                       </Text>
+                      {item.isPurchased && (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
+                          <Ionicons name="checkmark-circle" size={13} color={colors.primaryGreen} />
+                          <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primaryGreen }}>
+                            {item.completedDate || 'Completed'}
+                          </Text>
+                          {item.sourceAccount && (
+                            <Text style={{ fontSize: 11, color: colors.textMuted }}>
+                              • via {item.sourceAccount}
+                            </Text>
+                          )}
+                        </View>
+                      )}
                     </View>
 
                     <View style={styles.footerActions}>
@@ -342,7 +410,7 @@ export default function WishlistScreen() {
 
                       <TouchableOpacity
                         activeOpacity={0.8}
-                        onPress={() => handleTogglePurchased(item.id, item.isPurchased)}
+                        onPress={() => handleTogglePurchased(item)}
                         style={[
                           styles.purchaseBtn,
                           {
@@ -380,7 +448,10 @@ export default function WishlistScreen() {
       {/* ===================== MODAL: ADD WISHLIST ITEM ===================== */}
       <AestheticModal
         visible={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
+        onClose={() => {
+          setIsAddDatePickerOpen(false);
+          setIsAddModalOpen(false);
+        }}
         title="Add to Wishlist"
         subtitle="Set a new dream target or aspirational purchase"
         icon="🎁"
@@ -481,31 +552,6 @@ export default function WishlistScreen() {
               <Text style={{ fontSize: 12, fontWeight: '700', color: colors.textMain }}>Take Photo 📸</Text>
             </TouchableOpacity>
           </View>
-
-          {/* Preset Sample Photos Row */}
-          <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textMuted, marginBottom: 6 }}>
-            Or pick a preset sample photo:
-          </Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row' }}>
-            {PRESET_WISHLIST_PHOTOS.map((preset) => {
-              const isSelected = wishImageUrl === preset.url;
-              return (
-                <TouchableOpacity
-                  key={preset.id}
-                  onPress={() => setWishImageUrl(preset.url)}
-                  style={{
-                    marginRight: 8,
-                    borderRadius: 14,
-                    borderWidth: isSelected ? 2 : 0,
-                    borderColor: isSelected ? colors.primaryAccent : 'transparent',
-                    overflow: 'hidden',
-                  }}
-                >
-                  <Image source={{ uri: preset.url }} style={{ width: 48, height: 48 }} />
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
         </View>
 
         <View style={styles.formGroup}>
@@ -545,13 +591,43 @@ export default function WishlistScreen() {
 
         <View style={styles.formGroup}>
           <Text style={[styles.inputLabel, { color: colors.textMain }]}>Target Date / Milestone</Text>
-          <TextInput
-            style={[styles.input, { backgroundColor: colors.bgSecondary, color: colors.textMain, borderColor: colors.borderSoft }]}
-            placeholder="e.g. December 2026"
-            placeholderTextColor={colors.textSubtle}
-            value={wishDate}
-            onChangeText={setWishDate}
-          />
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <TextInput
+              style={[styles.input, { flex: 1, backgroundColor: colors.bgSecondary, color: colors.textMain, borderColor: colors.borderSoft }]}
+              placeholder="e.g. 15 Dec 2026 or December 2026"
+              placeholderTextColor={colors.textSubtle}
+              value={wishDate}
+              onChangeText={setWishDate}
+            />
+            <TouchableOpacity
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setIsAddDatePickerOpen((prev) => !prev);
+              }}
+              activeOpacity={0.7}
+              style={{
+                padding: 12,
+                borderRadius: 14,
+                backgroundColor: isAddDatePickerOpen ? colors.primaryAccent : colors.bgSecondary,
+              }}
+            >
+              <Ionicons
+                name="calendar-outline"
+                size={20}
+                color={isAddDatePickerOpen ? (colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214')) : colors.primaryAccent}
+              />
+            </TouchableOpacity>
+          </View>
+
+          {isAddDatePickerOpen && (
+            <View style={{ marginTop: 10 }}>
+              <CalendarPicker
+                currentValue={wishDate}
+                onSelectDate={(formattedDate) => setWishDate(formattedDate)}
+                onClose={() => setIsAddDatePickerOpen(false)}
+              />
+            </View>
+          )}
         </View>
 
         <TouchableOpacity
@@ -562,6 +638,140 @@ export default function WishlistScreen() {
             Add to Wishlist 🌟
           </Text>
         </TouchableOpacity>
+      </AestheticModal>
+
+      {/* ===================== MODAL: COMPLETE WISHLIST ITEM ===================== */}
+      <AestheticModal
+        visible={isCompleteModalOpen}
+        onClose={() => {
+          setIsCompleteDatePickerOpen(false);
+          setIsCompleteModalOpen(false);
+          setCompletingWish(null);
+        }}
+        title="Complete Wish 🎁"
+        subtitle="Record completion date & source account"
+        icon="🎉"
+      >
+        {completingWish && (
+          <View style={{ gap: 14 }}>
+            {/* Wish Summary Card */}
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 12,
+                padding: 14,
+                borderRadius: 16,
+                backgroundColor: colors.bgSecondary,
+              }}
+            >
+              <Text style={{ fontSize: 32 }}>{completingWish.emoji}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 16, fontWeight: '800', color: colors.textMain }} numberOfLines={1}>
+                  {completingWish.name}
+                </Text>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: colors.primaryGreen, marginTop: 2 }}>
+                  {currencySymbol} {completingWish.price.toLocaleString()}
+                </Text>
+              </View>
+            </View>
+
+            {/* Date Completed */}
+            <View style={styles.formGroup}>
+              <Text style={[styles.inputLabel, { color: colors.textMain }]}>Date Completed</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <TextInput
+                  style={[styles.input, { flex: 1, backgroundColor: colors.bgSecondary, color: colors.textMain, borderColor: colors.borderSoft }]}
+                  placeholder="e.g. 14 Nov 2026"
+                  placeholderTextColor={colors.textSubtle}
+                  value={completeDate}
+                  onChangeText={setCompleteDate}
+                />
+                <TouchableOpacity
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setIsCompleteDatePickerOpen((prev) => !prev);
+                  }}
+                  activeOpacity={0.7}
+                  style={{
+                    padding: 12,
+                    borderRadius: 14,
+                    backgroundColor: isCompleteDatePickerOpen ? colors.primaryAccent : colors.bgSecondary,
+                  }}
+                >
+                  <Ionicons
+                    name="calendar-outline"
+                    size={20}
+                    color={isCompleteDatePickerOpen ? (colors.textOnAccent || (theme === 'kawaii' ? '#2c352d' : '#121214')) : colors.primaryAccent}
+                  />
+                </TouchableOpacity>
+              </View>
+
+              {/* Inline Calendar Picker */}
+              {isCompleteDatePickerOpen && (
+                <View style={{ marginTop: 10 }}>
+                  <CalendarPicker
+                    currentValue={completeDate}
+                    onSelectDate={(formattedDate) => setCompleteDate(formattedDate)}
+                    onClose={() => setIsCompleteDatePickerOpen(false)}
+                  />
+                </View>
+              )}
+            </View>
+
+            {/* Money Taken Out From (Account) */}
+            <View style={styles.formGroup}>
+              <Text style={[styles.inputLabel, { color: colors.textMain }]}>Money Taken Out From (Account)</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} nestedScrollEnabled={true} style={styles.chipsScroll}>
+                {accounts.map((acc) => {
+                  const isSelected = completeAccount === acc.name;
+                  return (
+                    <TouchableOpacity
+                      key={acc.id}
+                      onPress={() => setCompleteAccount(acc.name)}
+                      style={[
+                        styles.accountChip,
+                        {
+                          backgroundColor: isSelected ? colors.primaryAccent : colors.bgSecondary,
+                          borderColor: 'transparent',
+                        },
+                      ]}
+                    >
+                      <Text style={{ fontSize: 15 }}>{acc.emoji}</Text>
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          fontWeight: isSelected ? '800' : '600',
+                          color: isSelected ? (colors.textOnAccent || '#121214') : colors.textMain,
+                        }}
+                      >
+                        {acc.name}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+
+            {/* Notice info pill */}
+            <View style={{ padding: 10, borderRadius: 12, backgroundColor: colors.bgSecondary, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Ionicons name="information-circle-outline" size={18} color={colors.primaryAccent} />
+              <Text style={{ fontSize: 11, color: colors.textMuted, flex: 1, lineHeight: 16 }}>
+                Deducts <Text style={{ fontWeight: '800', color: colors.textMain }}>{currencySymbol} {completingWish.price.toLocaleString()}</Text> from <Text style={{ fontWeight: '800', color: colors.textMain }}>{completeAccount}</Text> and logs an entry in Transactions.
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={handleConfirmComplete}
+              style={[styles.submitButton, { backgroundColor: colors.primaryAccent, marginTop: 4 }]}
+            >
+              <Text style={styles.submitButtonText}>
+                Confirm & Record Transaction 🎉
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </AestheticModal>
 
       {/* ===================== FULL-SCREEN IMAGE LIGHTBOX MODAL ===================== */}
@@ -866,6 +1076,15 @@ const styles = StyleSheet.create({
   priorityBtnText: {
     fontSize: 11,
     fontWeight: '700',
+  },
+  accountChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 14,
+    marginRight: 8,
   },
   submitButton: {
     borderRadius: 16,

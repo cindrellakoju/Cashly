@@ -75,6 +75,8 @@ export async function clearAllDatabaseTables(): Promise<void> {
     "INSERT OR REPLACE INTO categories (id, name, emoji, color) VALUES ('4', 'Shopping', '🛍️', '#f2738a');",
     "INSERT OR REPLACE INTO categories (id, name, emoji, color) VALUES ('5', 'Utilities', '🏠', '#7ab583');",
     "INSERT OR REPLACE INTO categories (id, name, emoji, color) VALUES ('6', 'Fun', '🍿', '#9d7be2');",
+    "INSERT OR REPLACE INTO categories (id, name, emoji, color) VALUES ('7', 'Money Lent', '🤝', '#38bdf8');",
+    "INSERT OR REPLACE INTO categories (id, name, emoji, color) VALUES ('8', 'Wishlist', '🎁', '#ec4899');",
     "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('theme', 'kawaii');",
     "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('currencySymbol', 'Rs.');",
     "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('salary', '0');",
@@ -131,10 +133,21 @@ export async function markOnboardingCompleted(): Promise<void> {
   } catch (e) { }
 }
 
+export interface SalaryLog {
+  id: string;
+  action: 'added' | 'updated' | 'removed';
+  amount?: number;
+  day?: string;
+  accountName?: string;
+  timestamp: string;
+  note?: string;
+}
+
 export interface AppStateData {
   theme: AppTheme;
   stickerPack?: StickerPack;
   currencySymbol: string;
+  customCurrencies?: string[];
   salary: number;
   hasBaseSalary?: boolean | null;
   baseSalaryDate?: string;
@@ -155,9 +168,12 @@ export interface AppStateData {
   transfers: InternalTransfer[];
   transactions: Transaction[];
   salaries: SalaryRecord[];
+  salaryLogs?: SalaryLog[];
   initialCashInHand?: number;
+  hasSetInitialCash?: boolean;
   showMonthlyBills?: boolean;
   recoveryEmail?: string;
+  salaryStartDate?: string;
 }
 
 export async function initDatabase(defaultData: AppStateData): Promise<AppStateData> {
@@ -239,7 +255,10 @@ export async function initDatabase(defaultData: AppStateData): Promise<AppStateD
       price REAL NOT NULL,
       targetDate TEXT NOT NULL,
       isPurchased INTEGER NOT NULL DEFAULT 0,
-      imageUrl TEXT
+      imageUrl TEXT,
+      completedDate TEXT,
+      sourceAccount TEXT,
+      expenseId TEXT
     );
 
     CREATE TABLE IF NOT EXISTS accounts (
@@ -282,14 +301,47 @@ export async function initDatabase(defaultData: AppStateData): Promise<AppStateD
       account_name TEXT,
       created_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS salary_logs (
+      id TEXT PRIMARY KEY,
+      action TEXT NOT NULL,
+      amount REAL,
+      day TEXT,
+      account_name TEXT,
+      timestamp TEXT NOT NULL,
+      note TEXT
+    );
   `);
 
-  // Migrate existing databases if missing imageUrl column in wishlist
+  try {
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS salary_logs (
+        id TEXT PRIMARY KEY,
+        action TEXT NOT NULL,
+        amount REAL,
+        day TEXT,
+        account_name TEXT,
+        timestamp TEXT NOT NULL,
+        note TEXT
+      );
+    `);
+  } catch (e) { }
+
+  // Migrate existing databases if missing imageUrl/completedDate/sourceAccount/expenseId columns in wishlist
   try {
     await db.execAsync('ALTER TABLE wishlist ADD COLUMN imageUrl TEXT;');
   } catch (e) {
     // Column may already exist
   }
+  try {
+    await db.execAsync('ALTER TABLE wishlist ADD COLUMN completedDate TEXT;');
+  } catch (e) { }
+  try {
+    await db.execAsync('ALTER TABLE wishlist ADD COLUMN sourceAccount TEXT;');
+  } catch (e) { }
+  try {
+    await db.execAsync('ALTER TABLE wishlist ADD COLUMN expenseId TEXT;');
+  } catch (e) { }
 
   // Migrate existing databases if missing reason/account/date columns in debts
   try {
@@ -463,6 +515,9 @@ export async function seedDatabase(data: AppStateData): Promise<void> {
     if (data.recoveryEmail !== undefined) {
       await db.runAsync('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)', ['recovery_email', data.recoveryEmail]);
     }
+    if (data.salaryStartDate !== undefined) {
+      await db.runAsync('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)', ['salary_start_date', data.salaryStartDate]);
+    }
     await db.runAsync('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)', ['is_initialized', 'true']);
 
     // Envelopes
@@ -568,8 +623,9 @@ export async function loadAllData(defaultData: AppStateData): Promise<AppStateDa
   const validThemes: AppTheme[] = ['paper', 'paperDark', 'kawaii', 'dreamy', 'fresh', 'playful', 'midnight', 'noir'];
   const theme: AppTheme = (rawTheme === 'noir' || rawTheme === 'paperDark') ? 'paperDark' : (validThemes.includes(rawTheme) ? rawTheme : 'kawaii');
   const rawStickerPack = settingsMap.get('sticker_pack');
-  const validPacks: StickerPack[] = ['totoro', 'spy_family', 'cat'];
-  const stickerPack: StickerPack = validPacks.includes(rawStickerPack as any) ? (rawStickerPack as StickerPack) : 'totoro';
+  const validPacks: StickerPack[] = ['totoro', 'spy_family', 'cat', 'penguin'];
+  const normalizedPack = rawStickerPack === 'nero' ? 'penguin' : rawStickerPack;
+  const stickerPack: StickerPack = validPacks.includes(normalizedPack as any) ? (normalizedPack as StickerPack) : 'totoro';
   const currencySymbol = (settingsMap.get('currencySymbol') || defaultData.currencySymbol || 'Rs.').trim();
   const salary = settingsMap.has('salary') ? Number(settingsMap.get('salary')) : defaultData.salary;
   const hasBaseSalaryRaw = settingsMap.get('has_base_salary');
@@ -579,8 +635,7 @@ export async function loadAllData(defaultData: AppStateData): Promise<AppStateDa
   const pinCode = accountPin;
   const adminPin = settingsMap.get('admin_pin') || defaultData.adminPin || '1234';
   const rawRecoveryEmail = settingsMap.get('recovery_email') || defaultData.recoveryEmail || '';
-  // The recovery email must be explicitly added by the user themselves, not pre-populated with developer email
-  const recoveryEmail = rawRecoveryEmail === 'cindrellakoju@gmail.com' ? '' : rawRecoveryEmail;
+  const recoveryEmail = rawRecoveryEmail.trim().toLowerCase();
   const salaryAccountId = settingsMap.get('salary_account_id') || defaultData.salaryAccountId || null;
   let asyncStorageWelcome = false;
   try {
@@ -604,11 +659,54 @@ export async function loadAllData(defaultData: AppStateData): Promise<AppStateDa
     if (creditedRaw) creditedSalaryMonths = JSON.parse(creditedRaw);
   } catch (e) { }
 
+  const rawSalaryStartDate = settingsMap.get('salary_start_date');
+  let salaryStartDate = rawSalaryStartDate || defaultData.salaryStartDate || '';
+  if (!salaryStartDate) {
+    const now = new Date();
+    salaryStartDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    try {
+      await db.runAsync('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)', ['salary_start_date', salaryStartDate]);
+    } catch (e) { }
+  }
+
+  const rawCustomCurrencies = settingsMap.get('custom_currencies');
+  let customCurrencies: string[] = [];
+  try {
+    if (rawCustomCurrencies) customCurrencies = JSON.parse(rawCustomCurrencies);
+  } catch (e) { }
+  if (!Array.isArray(customCurrencies)) customCurrencies = [];
+  const standardCurrencies = ['Rs.', '$', '₹', '€'];
+  if (currencySymbol && !standardCurrencies.includes(currencySymbol) && !customCurrencies.includes(currencySymbol)) {
+    customCurrencies.push(currencySymbol);
+  }
+
   // Envelopes
   const envelopes = await db.getAllAsync<CashEnvelope>('SELECT id, name, emoji, color, budgeted FROM envelopes');
 
   // Categories
-  const categories = await db.getAllAsync<Category>('SELECT id, name, emoji, color FROM categories');
+  let categories = await db.getAllAsync<Category>('SELECT id, name, emoji, color FROM categories');
+  const hasMoneyLent = categories.some((c) => c.name.toLowerCase().includes('money lent') || c.name.toLowerCase() === 'lent');
+  if (!hasMoneyLent) {
+    const moneyLentCat: Category = { id: '7', name: 'Money Lent', emoji: '🤝', color: '#38bdf8' };
+    await db.runAsync('INSERT OR REPLACE INTO categories (id, name, emoji, color) VALUES (?, ?, ?, ?)', [
+      moneyLentCat.id,
+      moneyLentCat.name,
+      moneyLentCat.emoji,
+      moneyLentCat.color,
+    ]);
+    categories.push(moneyLentCat);
+  }
+  const hasWishlist = categories.some((c) => c.name.toLowerCase().includes('wishlist'));
+  if (!hasWishlist) {
+    const wishlistCat: Category = { id: '8', name: 'Wishlist', emoji: '🎁', color: '#ec4899' };
+    await db.runAsync('INSERT OR REPLACE INTO categories (id, name, emoji, color) VALUES (?, ?, ?, ?)', [
+      wishlistCat.id,
+      wishlistCat.name,
+      wishlistCat.emoji,
+      wishlistCat.color,
+    ]);
+    categories.push(wishlistCat);
+  }
 
   // Incomes
   const incomes = await db.getAllAsync<Income>('SELECT id, date, amount, stored, note, type FROM incomes');
@@ -693,7 +791,10 @@ export async function loadAllData(defaultData: AppStateData): Promise<AppStateDa
     targetDate: string;
     isPurchased: number;
     imageUrl: string | null;
-  }>('SELECT id, name, emoji, priority, price, targetDate, isPurchased, imageUrl FROM wishlist');
+    completedDate: string | null;
+    sourceAccount: string | null;
+    expenseId: string | null;
+  }>('SELECT id, name, emoji, priority, price, targetDate, isPurchased, imageUrl, completedDate, sourceAccount, expenseId FROM wishlist');
 
   const wishlist: WishlistItem[] = wishlistRows.map((w) => ({
     id: w.id,
@@ -704,6 +805,9 @@ export async function loadAllData(defaultData: AppStateData): Promise<AppStateDa
     targetDate: w.targetDate,
     isPurchased: Boolean(w.isPurchased),
     imageUrl: w.imageUrl || undefined,
+    completedDate: w.completedDate || undefined,
+    sourceAccount: w.sourceAccount || undefined,
+    expenseId: w.expenseId || undefined,
   }));
 
   // Accounts
@@ -795,7 +899,32 @@ export async function loadAllData(defaultData: AppStateData): Promise<AppStateDa
     createdAt: s.created_at,
   }));
 
+  // Salary Configuration Audit Logs
+  let salaryLogs: SalaryLog[] = [];
+  try {
+    const salaryLogRows = await db.getAllAsync<{
+      id: string;
+      action: string;
+      amount: number | null;
+      day: string | null;
+      account_name: string | null;
+      timestamp: string;
+      note: string | null;
+    }>('SELECT id, action, amount, day, account_name, timestamp, note FROM salary_logs ORDER BY timestamp DESC');
+    salaryLogs = salaryLogRows.map((r) => ({
+      id: r.id,
+      action: r.action as 'added' | 'updated' | 'removed',
+      amount: r.amount !== null ? r.amount : undefined,
+      day: r.day !== null ? r.day : undefined,
+      accountName: r.account_name !== null ? r.account_name : undefined,
+      timestamp: r.timestamp,
+      note: r.note !== null ? r.note : undefined,
+    }));
+  } catch (e) { }
+
   const initialCashInHand = Number(settingsMap.get('initial_cash_in_hand') || 0);
+  const hasSetInitialCashRaw = settingsMap.get('has_set_initial_cash');
+  const hasSetInitialCash = hasSetInitialCashRaw !== undefined ? hasSetInitialCashRaw === 'true' : (initialCashInHand > 0);
 
   const showMonthlyBillsRaw = settingsMap.get('show_monthly_bills');
   const showMonthlyBills = showMonthlyBillsRaw !== undefined ? showMonthlyBillsRaw === 'true' : true;
@@ -808,10 +937,19 @@ export async function loadAllData(defaultData: AppStateData): Promise<AppStateDa
     hasBaseSalaryRaw !== undefined ||
     accounts.some((a) => a.balance > 0);
 
-  // Onboarding is completed ONLY if the user has completed onboarding AND has a verified recovery email.
+  // Onboarding is completed if marked in settings, if recovery email is verified, or if existing data was already created
   const hasOnboardingFlag = settingsMap.get('has_completed_onboarding') === 'true';
-  const hasVerifiedEmail = Boolean(recoveryEmail && recoveryEmail.trim().length > 0);
-  const hasCompletedOnboarding = hasOnboardingFlag && hasVerifiedEmail;
+  const hasVerifiedEmail = Boolean(recoveryEmail && recoveryEmail.length > 0);
+  const hasCompletedOnboarding = hasOnboardingFlag || hasVerifiedEmail || (hasWelcomeFlag && hasExistingData);
+
+  // If verified or active user, ensure persistent flags are stored so reloads always continue from Home
+  if (hasCompletedOnboarding && (!hasOnboardingFlag || !hasWelcomeFlag)) {
+    try {
+      await db.runAsync("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('has_completed_onboarding', 'true')");
+      await db.runAsync("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('welcome_shown', 'true')");
+      await AsyncStorage.setItem(WELCOME_SHOWN_KEY, 'true');
+    } catch (e) { }
+  }
 
   return {
     theme,
@@ -838,8 +976,12 @@ export async function loadAllData(defaultData: AppStateData): Promise<AppStateDa
     transactions,
     salaries,
     initialCashInHand,
+    hasSetInitialCash,
     showMonthlyBills,
     recoveryEmail,
+    salaryStartDate,
+    customCurrencies,
+    salaryLogs,
   };
 }
 
@@ -952,14 +1094,35 @@ export async function updateDebtAndHistory(debt: DebtItem, newInstallment: Insta
 export async function insertWishlistItem(item: WishlistItem): Promise<void> {
   const db = await getDB();
   await db.runAsync(
-    'INSERT OR REPLACE INTO wishlist (id, name, emoji, priority, price, targetDate, isPurchased, imageUrl) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    [item.id, item.name, item.emoji, item.priority, item.price, item.targetDate, item.isPurchased ? 1 : 0, item.imageUrl || null]
+    'INSERT OR REPLACE INTO wishlist (id, name, emoji, priority, price, targetDate, isPurchased, imageUrl, completedDate, sourceAccount, expenseId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [
+      item.id,
+      item.name,
+      item.emoji,
+      item.priority,
+      item.price,
+      item.targetDate,
+      item.isPurchased ? 1 : 0,
+      item.imageUrl || null,
+      item.completedDate || null,
+      item.sourceAccount || null,
+      item.expenseId || null,
+    ]
   );
 }
 
-export async function updateWishlistPurchased(id: string, isPurchased: boolean): Promise<void> {
+export async function updateWishlistPurchased(
+  id: string,
+  isPurchased: boolean,
+  completedDate?: string,
+  sourceAccount?: string,
+  expenseId?: string
+): Promise<void> {
   const db = await getDB();
-  await db.runAsync('UPDATE wishlist SET isPurchased = ? WHERE id = ?', [isPurchased ? 1 : 0, id]);
+  await db.runAsync(
+    'UPDATE wishlist SET isPurchased = ?, completedDate = ?, sourceAccount = ?, expenseId = ? WHERE id = ?',
+    [isPurchased ? 1 : 0, completedDate || null, sourceAccount || null, expenseId || null, id]
+  );
 }
 
 export async function removeWishlistItem(id: string): Promise<void> {
@@ -1073,8 +1236,20 @@ export async function removeDebt(id: string): Promise<void> {
 export async function updateWishlistItemInDB(item: WishlistItem): Promise<void> {
   const db = await getDB();
   await db.runAsync(
-    'UPDATE wishlist SET name = ?, emoji = ?, priority = ?, price = ?, targetDate = ?, isPurchased = ?, imageUrl = ? WHERE id = ?',
-    [item.name, item.emoji, item.priority, item.price, item.targetDate, item.isPurchased ? 1 : 0, item.imageUrl || null, item.id]
+    'UPDATE wishlist SET name = ?, emoji = ?, priority = ?, price = ?, targetDate = ?, isPurchased = ?, imageUrl = ?, completedDate = ?, sourceAccount = ?, expenseId = ? WHERE id = ?',
+    [
+      item.name,
+      item.emoji,
+      item.priority,
+      item.price,
+      item.targetDate,
+      item.isPurchased ? 1 : 0,
+      item.imageUrl || null,
+      item.completedDate || null,
+      item.sourceAccount || null,
+      item.expenseId || null,
+      item.id,
+    ]
   );
 }
 
@@ -1132,9 +1307,18 @@ export async function removeSalaryRecord(id: string): Promise<void> {
   await db.runAsync('DELETE FROM salaries WHERE id = ?', [id]);
 }
 
+export async function insertSalaryLog(log: SalaryLog): Promise<void> {
+  const db = await getDB();
+  await db.runAsync(
+    'INSERT OR REPLACE INTO salary_logs (id, action, amount, day, account_name, timestamp, note) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [log.id, log.action, log.amount ?? null, log.day ?? null, log.accountName ?? null, log.timestamp, log.note ?? null]
+  );
+}
+
 export async function saveInitialCashInHand(amount: number): Promise<void> {
   const db = await getDB();
   await db.runAsync('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)', ['initial_cash_in_hand', String(amount)]);
+  await db.runAsync('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)', ['has_set_initial_cash', 'true']);
 }
 
 // ==========================================
@@ -1384,6 +1568,86 @@ export async function exportAllDataAsJSON(): Promise<string> {
   return encryptBackupPayload(rawJson);
 }
 
+/**
+ * Inspects an encrypted or plain backup JSON payload and retrieves the recovery email if one was configured.
+ */
+export function peekBackupRecoveryEmail(jsonString: string): string | null {
+  try {
+    const decryptResult = decryptBackupPayload(jsonString);
+    if (!decryptResult.success || !decryptResult.data) {
+      return null;
+    }
+    const parsed = JSON.parse(decryptResult.data);
+    const tables = parsed.tables || parsed;
+    if (Array.isArray(tables.app_settings)) {
+      const emailRow = tables.app_settings.find((s: any) => s && s.key === 'recovery_email');
+      if (emailRow && emailRow.value && typeof emailRow.value === 'string' && emailRow.value.trim()) {
+        return emailRow.value.trim().toLowerCase();
+      }
+    }
+    if (parsed.recoveryEmail && typeof parsed.recoveryEmail === 'string' && parsed.recoveryEmail.trim()) {
+      return parsed.recoveryEmail.trim().toLowerCase();
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Inspects a backup file and returns its validation status, counts, and configured recovery email.
+ */
+export function peekBackupSummary(jsonString: string): {
+  valid: boolean;
+  email: string | null;
+  counts: Record<string, number>;
+  error?: string;
+} {
+  try {
+    const decryptResult = decryptBackupPayload(jsonString);
+    if (!decryptResult.success || !decryptResult.data) {
+      return {
+        valid: false,
+        email: null,
+        counts: {},
+        error: decryptResult.error || 'Failed to decrypt or read backup payload.',
+      };
+    }
+    const parsed = JSON.parse(decryptResult.data);
+    if (!parsed || (!parsed.tables && !parsed.accounts && !parsed.expenses)) {
+      return {
+        valid: false,
+        email: null,
+        counts: {},
+        error: 'Invalid backup structure. Required data tables are missing.',
+      };
+    }
+    const tables = parsed.tables || parsed;
+    let email: string | null = null;
+    if (Array.isArray(tables.app_settings)) {
+      const emailRow = tables.app_settings.find((s: any) => s && s.key === 'recovery_email');
+      if (emailRow && emailRow.value && typeof emailRow.value === 'string' && emailRow.value.trim()) {
+        email = emailRow.value.trim().toLowerCase();
+      }
+    } else if (parsed.recoveryEmail && typeof parsed.recoveryEmail === 'string' && parsed.recoveryEmail.trim()) {
+      email = parsed.recoveryEmail.trim().toLowerCase();
+    }
+
+    const counts: Record<string, number> = {
+      accounts: Array.isArray(tables.accounts) ? tables.accounts.length : 0,
+      expenses: Array.isArray(tables.expenses) ? tables.expenses.length : 0,
+      incomes: Array.isArray(tables.incomes) ? tables.incomes.length : 0,
+      salaries: Array.isArray(tables.salaries) ? tables.salaries.length : 0,
+      debts: Array.isArray(tables.debts) ? tables.debts.length : 0,
+      wishlist: Array.isArray(tables.wishlist) ? tables.wishlist.length : 0,
+    };
+
+    return { valid: true, email, counts };
+  } catch (err: any) {
+    return { valid: false, email: null, counts: {}, error: err?.message || 'Could not parse backup JSON.' };
+  }
+}
+
 export async function importAllDataFromJSON(jsonString: string): Promise<{ success: boolean; message: string; counts?: Record<string, number> }> {
   try {
     const decryptResult = decryptBackupPayload(jsonString);
@@ -1430,6 +1694,11 @@ export async function importAllDataFromJSON(jsonString: string): Promise<{ succe
         }
       }
       await db.runAsync("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('is_initialized', 'true')");
+      await db.runAsync("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('has_completed_onboarding', 'true')");
+      await db.runAsync("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('welcome_shown', 'true')");
+      try {
+        await AsyncStorage.setItem(WELCOME_SHOWN_KEY, 'true');
+      } catch (e) { }
 
       // Accounts
       if (Array.isArray(tables.accounts)) {

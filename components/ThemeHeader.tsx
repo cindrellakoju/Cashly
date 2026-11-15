@@ -148,7 +148,7 @@ export const ThemeHeader: React.FC<ThemeHeaderProps> = ({
               },
             ]}
           >
-            <Text style={{ fontSize: 13 }}>{currentPackInfo.previewEmoji}</Text>
+            {/* <Text style={{ fontSize: 13 }}>{currentPackInfo.previewEmoji}</Text> */}
             <Text style={[styles.themeBadgeText, { color: colors.textMain }]}>
               {currentPackInfo.name.split(' ')[0]}
             </Text>
@@ -202,10 +202,10 @@ export const ThemeHeader: React.FC<ThemeHeaderProps> = ({
                 stickerKey === 'vault'
                   ? 'vault'
                   : stickerKey === 'wishlist'
-                  ? 'wishlist'
-                  : stickerKey === 'debitCredit'
-                  ? 'borrow_lent'
-                  : 'leaf'
+                    ? 'wishlist'
+                    : stickerKey === 'debitCredit'
+                      ? 'borrow_lent'
+                      : 'leaf'
               }
               size={54}
             />
@@ -247,7 +247,7 @@ export const ThemeHeader: React.FC<ThemeHeaderProps> = ({
                   },
                 ]}
               >
-                🧸 1. Stickers
+                1. Stickers
               </Text>
             </TouchableOpacity>
 
@@ -274,7 +274,7 @@ export const ThemeHeader: React.FC<ThemeHeaderProps> = ({
                   },
                 ]}
               >
-                🎨 2. Theme Color
+                2. Theme Color
               </Text>
             </TouchableOpacity>
           </View>
@@ -311,7 +311,7 @@ export const ThemeHeader: React.FC<ThemeHeaderProps> = ({
                     <View style={styles.presetLeft}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                         <Text style={[styles.presetTitle, { color: colors.textMain }]}>
-                          {pack.name} {pack.previewEmoji}
+                          {pack.name}
                         </Text>
                         {isSelected && (
                           <View style={[styles.activeTag, { backgroundColor: colors.primaryGreenLight, borderColor: 'transparent' }]}>
@@ -319,9 +319,9 @@ export const ThemeHeader: React.FC<ThemeHeaderProps> = ({
                           </View>
                         )}
                       </View>
-                      <Text style={[styles.presetSubtitle, { color: colors.textMuted }]} numberOfLines={2}>
+                      {/* <Text style={[styles.presetSubtitle, { color: colors.textMuted }]} numberOfLines={2}>
                         {pack.tagline}
-                      </Text>
+                      </Text> */}
                     </View>
 
                     {isSelected ? (
@@ -369,13 +369,6 @@ export const ThemeHeader: React.FC<ThemeHeaderProps> = ({
                             <Text style={[styles.activeTagText, { color: colors.primaryGreen }]}>ACTIVE</Text>
                           </View>
                         )}
-                      </View>
-                      <Text style={[styles.presetSubtitle, { color: colors.textMuted }]}>{opt.subtitle}</Text>
-                      {/* Swatch preview dots */}
-                      <View style={styles.dotsRow}>
-                        {opt.dots.map((d, i) => (
-                          <View key={i} style={[styles.presetDot, { backgroundColor: d, borderColor: 'transparent' }]} />
-                        ))}
                       </View>
                     </View>
 

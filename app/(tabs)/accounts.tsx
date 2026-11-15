@@ -13,7 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { useFinancial, TransactionType } from '@/context/FinancialContext';
+import { useFinancial, TransactionType, Account } from '@/context/FinancialContext';
 import { ThemeHeader } from '@/components/ThemeHeader';
 import { TotoroSticker } from '@/components/TotoroStickers';
 import { SegmentedControl } from '@/components/SegmentedControl';
@@ -45,6 +45,7 @@ export default function AccountsScreen() {
     addTransfer,
     addTransaction,
     initialCashInHand,
+    hasSetInitialCash,
     setCashInHandInitialMoney,
   } = useFinancial();
 
@@ -54,7 +55,7 @@ export default function AccountsScreen() {
   const [transferSearch, setTransferSearch] = useState<string>('');
 
   // Modals
-  const [isAccountPinModalOpen, setIsAccountPinModalOpen] = useState(!isVaultUnlocked);
+  const [isAccountPinModalOpen, setIsAccountPinModalOpen] = useState(false);
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   const [isInitialCashModalOpen, setIsInitialCashModalOpen] = useState(false);
   const [initialCashInput, setInitialCashInput] = useState('');
@@ -227,6 +228,35 @@ export default function AccountsScreen() {
     setIsTransferModalOpen(false);
   };
 
+  // Handle Designating Salary Account
+  const handleDesignateSalary = (acc: Account) => {
+    if (Platform.OS === 'web') {
+      const ok = window.confirm(
+        `💼 Designate Salary Account\n\nDesignate "${acc.name}" as the account where monthly salary is stored for record keeping?`
+      );
+      if (ok) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setSalaryAccountId(acc.id);
+      }
+      return;
+    }
+
+    Alert.alert(
+      '💼 Designate Salary Account',
+      `Designate "${acc.name}" as the account where monthly salary is stored for record keeping?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Designate',
+          onPress: () => {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            setSalaryAccountId(acc.id);
+          },
+        },
+      ]
+    );
+  };
+
   // Handle Add Transaction Submit
   const handleAddTxSubmit = () => {
     const amt = parseFloat(txAmount);
@@ -306,11 +336,8 @@ export default function AccountsScreen() {
               },
             ]}
           >
-            <View style={{ alignItems: 'center', marginBottom: 6 }}>
-              <TotoroSticker type="vault" size={96} />
-              <View style={[styles.paperLockBadge, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft, marginTop: -14 }]}>
-                <Ionicons name="lock-closed-outline" size={22} color={colors.textMain} />
-              </View>
+            <View style={{ alignItems: 'center', paddingTop: 6, marginBottom: 12 }}>
+              <TotoroSticker type="vault" size={104} />
             </View>
             <Text style={[styles.lockedTitle, { color: colors.textMain, marginTop: 12 }]}>Account Vault Locked</Text>
             <Text style={[styles.lockedSubtitle, { color: colors.textMuted }]}>
@@ -377,7 +404,7 @@ export default function AccountsScreen() {
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
               lockVault();
-              setIsAccountPinModalOpen(true);
+              setIsAccountPinModalOpen(false);
             }}
             style={[styles.lockVaultBtn, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}
           >
@@ -418,7 +445,7 @@ export default function AccountsScreen() {
                 },
               ]}
             >
-              <TotoroSticker type="savings" size={48} style={{ position: 'absolute', top: -16, right: 14, zIndex: 10 }} />
+              
                 <View style={styles.netWorthHeader}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                   <View style={[styles.paperIconBadge, { backgroundColor: colors.bgSecondary, borderColor: colors.borderSoft }]}>
@@ -478,57 +505,48 @@ export default function AccountsScreen() {
                               </View>
                             )}
                           </View>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2, flexWrap: 'wrap' }}>
                             <Text style={[styles.accountType, { color: colors.textMuted }]}>
                               {acc.type.toUpperCase()}
                             </Text>
-                            {!isSalaryAcc && (acc.type === 'bank' || acc.type === 'savings') && (
-                              <TouchableOpacity
-                                onPress={() => {
-                                  if (Platform.OS === 'web') {
-                                    const ok = window.confirm(
-                                      `💼 Designate Salary Account\n\nDesignate "${acc.name}" as the bank account where monthly salary is stored for record keeping?`
-                                    );
-                                    if (ok) {
-                                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                                      setSalaryAccountId(acc.id);
-                                    }
-                                    return;
-                                  }
-
-                                  Alert.alert(
-                                    '💼 Designate Salary Account',
-                                    `Designate "${acc.name}" as the bank account where monthly salary is stored for record keeping?`,
-                                    [
-                                      { text: 'Cancel', style: 'cancel' },
-                                      {
-                                        text: 'Designate',
-                                        onPress: () => {
-                                          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                                          setSalaryAccountId(acc.id);
-                                        },
-                                      },
-                                    ]
-                                  );
-                                }}
-                              >
+                            {!isSalaryAcc && (acc.type === 'bank' || acc.type === 'savings' || acc.type === 'wallet') && (
+                              <TouchableOpacity onPress={() => handleDesignateSalary(acc)}>
                                 <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primaryAccent }}>
                                   Set Salary 💼
                                 </Text>
                               </TouchableOpacity>
                             )}
                             {(acc.type === 'cash' || acc.name.toLowerCase().includes('cash in hand')) && (
-                              <TouchableOpacity
-                                onPress={() => {
-                                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                  setInitialCashInput(initialCashInHand > 0 ? String(initialCashInHand) : (acc.balance > 0 ? String(acc.balance) : ''));
-                                  setIsInitialCashModalOpen(true);
-                                }}
-                              >
-                                <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primaryGreen }}>
-                                  Initial Money 💵
-                                </Text>
-                              </TouchableOpacity>
+                              !hasSetInitialCash ? (
+                                <TouchableOpacity
+                                  onPress={() => {
+                                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                    setInitialCashInput('');
+                                    setIsInitialCashModalOpen(true);
+                                  }}
+                                  style={{
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    gap: 3,
+                                    paddingHorizontal: 8,
+                                    paddingVertical: 3,
+                                    borderRadius: 6,
+                                    backgroundColor: colors.primaryGreenLight || '#eaf4eb',
+                                  }}
+                                >
+                                  <Text style={{ fontSize: 11, fontWeight: '800', color: colors.primaryGreen }}>
+                                    ＋ Add Initial Money 💵
+                                  </Text>
+                                </TouchableOpacity>
+                              ) : (
+                                !isSalaryAcc && (
+                                  <TouchableOpacity onPress={() => handleDesignateSalary(acc)}>
+                                    <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primaryAccent }}>
+                                      Set Salary 💼
+                                    </Text>
+                                  </TouchableOpacity>
+                                )
+                              )
                             )}
                           </View>
                         </View>
@@ -758,9 +776,9 @@ export default function AccountsScreen() {
         icon="💵"
       >
         <View style={{ paddingVertical: 4 }}>
-          <View style={{ backgroundColor: colors.bgSecondary, padding: 12, borderRadius: 14, marginBottom: 14,  }}>
+          <View style={{ backgroundColor: colors.bgSecondary, padding: 12, borderRadius: 14, marginBottom: 14 }}>
             <Text style={{ fontSize: 12, color: colors.textMuted, lineHeight: 18 }}>
-              💡 <Text style={{ fontWeight: '800', color: colors.textMain }}>Opening Balance:</Text> Initial money sets your physical cash starting balance. It does NOT count as incoming income and will not be recorded in transactions.
+              💡 <Text style={{ fontWeight: '800', color: colors.textMain }}>Opening Balance (One-Time Only):</Text> Initial money sets your physical cash starting balance. It can only be added once and cannot be re-edited later. It does NOT count as incoming income and will not be recorded in transactions.
             </Text>
           </View>
 
@@ -802,8 +820,10 @@ export default function AccountsScreen() {
                 const num = parseFloat(initialCashInput);
                 if (isNaN(num) || num < 0) return;
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                await setCashInHandInitialMoney(num);
-                setIsInitialCashModalOpen(false);
+                const success = await setCashInHandInitialMoney(num);
+                if (success) {
+                  setIsInitialCashModalOpen(false);
+                }
               }}
               style={[styles.submitButton, { flex: 1.5, backgroundColor: colors.primaryAccent }]}
             >
@@ -1123,21 +1143,7 @@ export default function AccountsScreen() {
           </Text>
         </TouchableOpacity>
       </AestheticModal>
-
-      {/* Account PIN Verification Modal */}
-      <AdminPinModal
-        visible={isAccountPinModalOpen}
-        onClose={() => setIsAccountPinModalOpen(false)}
-        onSuccess={() => {
-          setIsAccountPinModalOpen(false);
-        }}
-        title="Account Vault Access"
-        subtitle="Enter 4-Digit Security PIN to Access Banking Records"
-        icon="🏦"
-        pinType="account"
-        onVerify={verifyAccountPin}
-      />
-          </ImageBackground>
+    </ImageBackground>
     </SafeAreaView>
   );
 }

@@ -4,13 +4,23 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
+  StyleProp,
+  ViewStyle,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useFinancial } from '@/context/FinancialContext';
 import { AestheticModal } from './AestheticModal';
 
-interface DatePickerFieldModalProps {
+export interface CalendarPickerProps {
+  currentValue?: string;
+  initialDate?: string;
+  onSelectDate: (formattedDate: string) => void;
+  onClose?: () => void;
+  containerStyle?: StyleProp<ViewStyle>;
+}
+
+export interface DatePickerFieldModalProps {
   visible: boolean;
   onClose: () => void;
   onSelectDate: (formattedDate: string) => void;
@@ -30,20 +40,20 @@ const SHORT_MONTH_NAMES = [
 
 const DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-export const DatePickerFieldModal: React.FC<DatePickerFieldModalProps> = ({
-  visible,
-  onClose,
-  onSelectDate,
+export const CalendarPicker: React.FC<CalendarPickerProps> = ({
   currentValue,
   initialDate,
+  onSelectDate,
+  onClose,
+  containerStyle,
 }) => {
   const { colors, theme } = useFinancial();
 
   const parseDateValue = (val?: string): Date => {
     if (!val) return new Date();
     const trimmed = val.trim();
-    // 1. Match DD Mon YYYY: e.g. "15 Jul 2026"
-    const textMatch = trimmed.match(/^(\d{1,2})\s+([A-Za-z]{3,})\s+(\d{4})/);
+    // 1. Match DD Mon YYYY: e.g. "15 Jul 2026", "15 Nov 2026"
+    const textMatch = trimmed.match(/^(\d{1,2})\s+([A-Za-z]{3,})\.?\s+(\d{4})/);
     if (textMatch) {
       const d = parseInt(textMatch[1], 10);
       const mStr = textMatch[2].slice(0, 3).toLowerCase();
@@ -63,6 +73,16 @@ export const DatePickerFieldModal: React.FC<DatePickerFieldModalProps> = ({
         return new Date(y, m, d);
       }
     }
+    // 3. Match DD/MM/YYYY or DD-MM-YYYY
+    const dmyMatch = trimmed.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/);
+    if (dmyMatch) {
+      const d = parseInt(dmyMatch[1], 10);
+      const m = parseInt(dmyMatch[2], 10) - 1;
+      const y = parseInt(dmyMatch[3], 10);
+      if (m >= 0 && m <= 11 && d >= 1 && d <= 31) {
+        return new Date(y, m, d);
+      }
+    }
     const parsed = new Date(trimmed);
     return isNaN(parsed.getTime()) ? new Date() : parsed;
   };
@@ -75,15 +95,13 @@ export const DatePickerFieldModal: React.FC<DatePickerFieldModalProps> = ({
   const [selectedMonthIndex, setSelectedMonthIndex] = useState<number>(todayObj.getMonth());
 
   useEffect(() => {
-    if (visible) {
-      const d = parseDateValue(currentValue || initialDate);
-      setCurrentYear(d.getFullYear());
-      setCurrentMonthIndex(d.getMonth());
-      setSelectedDayNum(d.getDate());
-      setSelectedYear(d.getFullYear());
-      setSelectedMonthIndex(d.getMonth());
-    }
-  }, [visible, currentValue, initialDate]);
+    const d = parseDateValue(currentValue || initialDate);
+    setCurrentYear(d.getFullYear());
+    setCurrentMonthIndex(d.getMonth());
+    setSelectedDayNum(d.getDate());
+    setSelectedYear(d.getFullYear());
+    setSelectedMonthIndex(d.getMonth());
+  }, [currentValue, initialDate]);
 
   // Navigate Months
   const handlePrevMonth = () => {
@@ -130,7 +148,9 @@ export const DatePickerFieldModal: React.FC<DatePickerFieldModalProps> = ({
     const monthShort = SHORT_MONTH_NAMES[currentMonthIndex];
     const formatted = `${dayPadded} ${monthShort} ${currentYear}`;
     onSelectDate(formatted);
-    onClose();
+    if (onClose) {
+      onClose();
+    }
   };
 
   // Presets
@@ -147,8 +167,15 @@ export const DatePickerFieldModal: React.FC<DatePickerFieldModalProps> = ({
     const monthShort = SHORT_MONTH_NAMES[d.getMonth()];
     const year = d.getFullYear();
     const formatted = `${dayPadded} ${monthShort} ${year}`;
+    setSelectedDayNum(day);
+    setSelectedYear(year);
+    setSelectedMonthIndex(d.getMonth());
+    setCurrentYear(year);
+    setCurrentMonthIndex(d.getMonth());
     onSelectDate(formatted);
-    onClose();
+    if (onClose) {
+      onClose();
+    }
   };
 
   const formattedSelectedPreview = () => {
@@ -158,12 +185,15 @@ export const DatePickerFieldModal: React.FC<DatePickerFieldModalProps> = ({
   };
 
   return (
-    <AestheticModal
-      visible={visible}
-      onClose={onClose}
-      title="Select Date"
-      subtitle="Tap any day to choose record date"
-      icon="📅"
+    <View
+      style={[
+        styles.inlineCalendarCard,
+        {
+          backgroundColor: colors.bgSecondary,
+          borderColor: colors.borderSoft,
+        },
+        containerStyle,
+      ]}
     >
       {/* Quick Presets */}
       <View style={styles.presetRow}>
@@ -185,7 +215,7 @@ export const DatePickerFieldModal: React.FC<DatePickerFieldModalProps> = ({
         <TouchableOpacity
           onPress={() => handleSelectPreset('yesterday')}
           activeOpacity={0.7}
-          style={[styles.presetChip, { backgroundColor: colors.bgSecondary, borderColor: 'transparent', borderWidth: 0 }]}
+          style={[styles.presetChip, { backgroundColor: colors.bgCard, borderColor: 'transparent', borderWidth: 0 }]}
         >
           <Text style={[styles.presetChipText, { color: colors.textMain }]}>Yesterday ⏪</Text>
         </TouchableOpacity>
@@ -193,14 +223,14 @@ export const DatePickerFieldModal: React.FC<DatePickerFieldModalProps> = ({
         <TouchableOpacity
           onPress={() => handleSelectPreset('firstOfMonth')}
           activeOpacity={0.7}
-          style={[styles.presetChip, { backgroundColor: colors.bgSecondary, borderColor: 'transparent', borderWidth: 0 }]}
+          style={[styles.presetChip, { backgroundColor: colors.bgCard, borderColor: 'transparent', borderWidth: 0 }]}
         >
           <Text style={[styles.presetChipText, { color: colors.textMain }]}>1st of Month 🗓️</Text>
         </TouchableOpacity>
       </View>
 
       {/* Month Navigation */}
-      <View style={[styles.calendarHeader, { backgroundColor: colors.bgSecondary, borderColor: 'transparent' }]}>
+      <View style={[styles.calendarHeader, { backgroundColor: colors.bgCard, borderColor: 'transparent' }]}>
         <TouchableOpacity
           onPress={handlePrevMonth}
           activeOpacity={0.7}
@@ -243,7 +273,7 @@ export const DatePickerFieldModal: React.FC<DatePickerFieldModalProps> = ({
         })}
       </View>
 
-      {/* Calendar Days Grid (Strict 7 columns with 14.285% width) */}
+      {/* Calendar Days Grid */}
       <View style={styles.daysGrid}>
         {/* Blank Padding Days */}
         {Array.from({ length: firstDayOffset }).map((_, i) => (
@@ -274,7 +304,7 @@ export const DatePickerFieldModal: React.FC<DatePickerFieldModalProps> = ({
                       ? colors.primaryAccent
                       : isToday
                       ? (theme === 'kawaii' ? '#fdf1e7' : '#232822')
-                      : colors.bgSecondary,
+                      : colors.bgCard,
                     borderColor: isSelected
                       ? colors.primaryAccent
                       : isToday
@@ -314,7 +344,7 @@ export const DatePickerFieldModal: React.FC<DatePickerFieldModalProps> = ({
       </View>
 
       {/* Selected Date Summary & Confirm Bar */}
-      <View style={[styles.footerBar, { backgroundColor: colors.bgSecondary, borderColor: 'transparent' }]}>
+      <View style={[styles.footerBar, { backgroundColor: colors.bgCard, borderColor: 'transparent' }]}>
         <View style={styles.footerInfo}>
           <Text style={[styles.footerLabel, { color: colors.textMuted }]}>Selected</Text>
           <Text style={[styles.footerValue, { color: colors.textMain }]}>
@@ -327,7 +357,9 @@ export const DatePickerFieldModal: React.FC<DatePickerFieldModalProps> = ({
             const dayPadded = selectedDayNum < 10 ? `0${selectedDayNum}` : `${selectedDayNum}`;
             const monthShort = SHORT_MONTH_NAMES[selectedMonthIndex];
             onSelectDate(`${dayPadded} ${monthShort} ${selectedYear}`);
-            onClose();
+            if (onClose) {
+              onClose();
+            }
           }}
           activeOpacity={0.7}
           style={[styles.confirmBtn, { backgroundColor: colors.primaryAccent }]}
@@ -337,11 +369,42 @@ export const DatePickerFieldModal: React.FC<DatePickerFieldModalProps> = ({
           </Text>
         </TouchableOpacity>
       </View>
+    </View>
+  );
+};
+
+export const DatePickerFieldModal: React.FC<DatePickerFieldModalProps> = ({
+  visible,
+  onClose,
+  onSelectDate,
+  currentValue,
+  initialDate,
+}) => {
+  return (
+    <AestheticModal
+      visible={visible}
+      onClose={onClose}
+      title="Select Date"
+      subtitle="Tap any day to choose record date"
+      icon="📅"
+    >
+      <CalendarPicker
+        currentValue={currentValue}
+        initialDate={initialDate}
+        onSelectDate={onSelectDate}
+        onClose={onClose}
+        containerStyle={{ backgroundColor: 'transparent', borderWidth: 0, padding: 0 }}
+      />
     </AestheticModal>
   );
 };
 
 const styles = StyleSheet.create({
+  inlineCalendarCard: {
+    borderRadius: 20,
+    padding: 14,
+    borderWidth: 1,
+  },
   presetRow: {
     flexDirection: 'row',
     gap: 8,
