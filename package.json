@@ -6,8 +6,8 @@
     "start": "expo start",
     "tunnel": "expo start --tunnel",
     "reset-project": "node ./scripts/reset-project.js",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web",
     "email-server": "node ./scripts/email-server.js",
     "lint": "expo lint"
@@ -22,6 +22,7 @@
     "dotenv": "^18.0.8",
     "expo": "~58.0.19",
     "expo-constants": "~58.0.13",
+    "expo-dev-client": "~58.0.21",
     "expo-document-picker": "~58.0.4",
     "expo-file-system": "~58.0.11",
     "expo-font": "~58.0.10",
