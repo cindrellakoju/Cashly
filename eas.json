@@ -6,16 +6,25 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_EMAIL_API_URL": "https://mailer.sanjibkasti.com.np"
+      }
     },
     "preview": {
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_EMAIL_API_URL": "https://mailer.sanjibkasti.com.np"
       }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_EMAIL_API_URL": "https://mailer.sanjibkasti.com.np"
+      }
     }
   },
   "submit": {

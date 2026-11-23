@@ -237,14 +237,14 @@ export const BaseSalarySetupModal: React.FC<BaseSalarySetupModalProps> = ({
         setEmailError('Email server is missing the Google App Password. Open .env and set GMAIL_APP_PASSWORD.');
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       } else if (result.error === 'CONNECTION_FAILED') {
-        setEmailError('Cannot reach the email server. Run "npm run email-server" in a separate terminal, then try again.');
+        setEmailError('Failed to verification code. Please try again.');
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       } else {
         setEmailError(result.message || 'Failed to send code. Please try again.');
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       }
     } catch {
-      setEmailError('Cannot reach the email server. Run "npm run email-server" in a separate terminal, then try again.');
+      setEmailError('Failed to verification code. Please try again.');
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setIsSendingCode(false);
@@ -1112,7 +1112,7 @@ export const BaseSalarySetupModal: React.FC<BaseSalarySetupModalProps> = ({
           </View>
         </View>
       </View>
-      </KeyboardAvoidingView>
+    </KeyboardAvoidingView>
   );
 
   if (isInline) {
@@ -1124,7 +1124,7 @@ export const BaseSalarySetupModal: React.FC<BaseSalarySetupModalProps> = ({
       visible={visible}
       transparent
       animationType="fade"
-      onRequestClose={forceConfigureStep ? onClose : () => {}}
+      onRequestClose={forceConfigureStep ? onClose : () => { }}
       statusBarTranslucent
     >
       {modalContent}

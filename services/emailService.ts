@@ -21,8 +21,8 @@ export async function sendPinRecoveryEmail(params: {
   // Build candidate server endpoints to reach
   const endpoints: string[] = [];
 
-  // Custom override from .env
-  const customUrl = process.env.EXPO_PUBLIC_EMAIL_API_URL;
+  // Custom override from .env or default production mailer
+  const customUrl = process.env.EXPO_PUBLIC_EMAIL_API_URL || 'https://mailer.sanjibkasti.com.np';
   if (customUrl && customUrl.trim()) {
     const cleanUrl = customUrl.trim();
     const baseUrl = cleanUrl.replace(/\/send-pin\/?$/, '').replace(/\/send-verification\/?$/, '').replace(/\/$/, '');
@@ -135,7 +135,7 @@ export async function sendVerificationEmail(params: {
 
   const endpoints: string[] = [];
 
-  const customUrl = process.env.EXPO_PUBLIC_EMAIL_API_URL;
+  const customUrl = process.env.EXPO_PUBLIC_EMAIL_API_URL || 'https://mailer.sanjibkasti.com.np';
   if (customUrl && customUrl.trim()) {
     const cleanUrl = customUrl.trim();
     const baseUrl = cleanUrl.replace(/\/send-pin\/?$/, '').replace(/\/send-verification\/?$/, '').replace(/\/$/, '');
